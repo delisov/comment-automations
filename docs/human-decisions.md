@@ -250,3 +250,12 @@ Format:
 - Why: The service must be verifiable end to end without the real gateway, and the same code path must serve both.
 - Affects: service configuration, gateway HTTP adapter, ingestion endpoint, stand portal, docs/design.md deployment section
 - Status: active
+
+## HD-027  Draft both interfaces as static HTML before implementing
+- When: 2026-10-04T02:35+03:00
+- Who: Dmitriy Elisov
+- Where: Claude Code session, chat message
+- Decision: Before implementation continues, draft the interface of the automation platform (the customer-facing product) and the interface of the test stand portal as static HTML pages for review.
+- Why: See the product and its verification surface before committing to code.
+- Affects: docs/mockups, later decisions on a customer-facing web package
+- Status: active
