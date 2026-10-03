@@ -171,8 +171,10 @@
   .wart li{margin-bottom:6px}
   .wart .wfoot{margin-top:26px;padding-top:12px;border-top:1px solid var(--line);color:var(--faint);font-size:12px}
   .wclose{position:absolute;right:16px;top:12px;color:var(--faint);cursor:pointer;font-size:16px}
-  .wikilink{display:inline-block;margin:-12px 0 18px;font-size:13px;color:var(--mute);text-decoration:underline dotted;text-underline-offset:4px;cursor:pointer}
+  .subrow{display:flex;justify-content:space-between;align-items:center;margin:-12px 0 18px}
+  .wikilink{display:inline-block;font-size:13px;color:var(--mute);text-decoration:underline dotted;text-underline-offset:4px;cursor:pointer}
   .wikilink:hover{color:var(--nav-on)}
+  .wikilink.book::before{content:"📖 "}
 
   /* versions window */
   .vers{width:860px;max-width:94%;background:#fff;border-radius:14px;box-shadow:0 20px 40px rgba(0,0,0,.25);padding:22px 24px;position:relative}
@@ -262,8 +264,8 @@ function trigger({p, kinds=['comments'], which='any', keywords=['pricing','price
     <div class="field"><label>${kinds.includes('comments')&&kinds.includes('dm')?'And the comment or message contains':kinds.includes('dm')?'And the message contains':'And the comment contains'}</label>${kw}<div class="hint" style="margin-top:6px">Matches whole words, any letter case. Leave empty to match everything.</div></div>
   </div>`;
 }
-const wikiBtn = p => `<span class="wikilink wikibtn" data-p="${p.k}">${p.name} automations wiki</span>`;
-const editorHead = (name, p, state='Draft', actions) => `${crumbs(name)}<div class="ph"><div><div class="row"><h1 style="font-size:26px">${name}</h1>${state==='Live'?'<span class="pill ok">Live</span>':state==='Paused'?'<span class="pill warn">Paused</span>':'<span class="pill">Draft</span>'}</div><div class="sub">${plat(p)}</div></div><div class="row">${actions ?? (state==='Live'?'<span class="btn ghost">Move to draft</span><span class="btn sec">Save</span><span class="btn">Save and publish</span>':'<span class="btn sec">Save draft</span><span class="btn">Publish</span>')}</div></div>${tabs('Editor')}${wikiBtn(p)}`;
+const wikiBtn = (p, state='Draft') => `<div class="subrow"><span class="wikilink wikibtn book" data-p="${p.k}">${p.name} automations wiki</span><span class="wikilink">${state==='Draft'?'Not published yet':'Version 4 is active · all versions'}</span></div>`;
+const editorHead = (name, p, state='Draft', actions) => `${crumbs(name)}<div class="ph"><div><div class="row"><h1 style="font-size:26px">${name}</h1>${state==='Live'?'<span class="pill ok">Live</span>':state==='Paused'?'<span class="pill warn">Paused</span>':'<span class="pill">Draft</span>'}</div><div class="sub">${plat(p)}</div></div><div class="row">${actions ?? (state==='Live'?'<span class="btn ghost">Move to draft</span><span class="btn sec">Save</span><span class="btn">Save and publish</span>':'<span class="btn sec">Save draft</span><span class="btn">Publish</span>')}</div></div>${tabs('Editor')}${wikiBtn(p, state)}`;
 
 /* full Instagram flow (the brief) */
 const IG_STEPS = (opts={}) => `<div class="card"><h3>Then…</h3><div class="steps">
