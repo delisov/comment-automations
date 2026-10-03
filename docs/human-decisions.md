@@ -259,3 +259,57 @@ Format:
 - Why: See the product and its verification surface before committing to code.
 - Affects: docs/mockups, later decisions on a customer-facing web package
 - Status: active
+
+## HD-028  The product UI shows one feature; everything else is the host platform's own navigation
+- When: 2026-10-04T03:10+03:00
+- Who: Dmitriy Elisov
+- Where: Claude Code session, review of the first interface drafts
+- Decision: The automation feature occupies one item in the left navigation. Every other navigation item is the host platform's and must not be feature-specific. Nothing that exists only because this is a test task (diagnostic panels, mode indicators, clock controls) may look like part of the product. Such items sit at the bottom, float over the page, and are visibly foreign; the UI must look complete and valid with them hidden.
+- Why: The reader must see the feature inside her own product, not a separate app.
+- Affects: docs/mockups, any customer-facing web package, diagnostics overlay
+- Status: active
+
+## HD-029  Use Blotato's real design scheme
+- When: 2026-10-04T03:10+03:00
+- Who: Dmitriy Elisov
+- Where: Claude Code session, review of the first interface drafts
+- Decision: The product mockups use Blotato's actual visual language (navigation, colors, typography, component shapes, terminology) instead of an invented scheme.
+- Why: The founder must recognise her platform immediately and see the feature as part of it.
+- Affects: docs/mockups, design tokens
+- Status: active
+
+## HD-030  First tab is Overview with the list of automations; a simple constructor, not a novelty
+- When: 2026-10-04T03:10+03:00
+- Who: Dmitriy Elisov
+- Where: Claude Code session, review of the first interface drafts
+- Decision: The feature opens on an Overview tab that lists existing automations. The editor is a simple constructor modelled on established tools (ManyChat and similar); do not reinvent patterns that have existed for years.
+- Why: Users already know how these tools work.
+- Affects: docs/mockups, information architecture of the feature
+- Status: active
+
+## HD-031  Clean UI: no rule badges, no "allowed on X" annotations
+- When: 2026-10-04T03:10+03:00
+- Who: Dmitriy Elisov
+- Where: Claude Code session, review of the first interface drafts
+- Decision: The constructor does not decorate steps with platform-rule annotations. The interface is a normal, clean, informative UI that helps the user reach the job to be done.
+- Why: Rule chatter is noise to the user; the rules belong in behaviour, not in labels.
+- Affects: docs/mockups, editor components
+- Status: active
+
+## HD-032  No "publish check": the constructor only offers what the platform allows
+- When: 2026-10-04T03:10+03:00
+- Who: Dmitriy Elisov
+- Where: Claude Code session, review of the first interface drafts
+- Decision: There is no publish-time validation screen. The constructor exposes only the step kinds, options and limits the selected account's platform supports; a flow that can be built can be published. Publish-time validation remains in the API as a guard, but the UI never needs to show a rejection for something it offered.
+- Why: If the constructor allows building something the platform rejects, the constructor is wrong.
+- Affects: docs/mockups, editor step palette driven by the capability record, API validation stays as a guard
+- Status: active
+
+## HD-033  The platform mockup is a full screen gallery: all pages, all states, all platforms
+- When: 2026-10-04T03:10+03:00
+- Who: Dmitriy Elisov
+- Where: Claude Code session, with the Cerber v5 screen gallery as the reference format
+- Decision: Deliver the product interface as a static screen gallery in the same format as the test-stand gallery: one card per screen state, a search box, consistent components, covering every page and every state for every supported platform.
+- Why: Review needs the whole surface at once, not one happy-path screen.
+- Affects: docs/mockups/platform-gallery.html
+- Status: active
