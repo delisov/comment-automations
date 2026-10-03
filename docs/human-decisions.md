@@ -322,3 +322,12 @@ Format:
 - Why: Full history and safe rollback; the same rule the backend already applies to runs.
 - Affects: automation_versions schema (active pointer separate from max version), publish and revert API, versions window in the UI, docs/design.md
 - Status: active
+
+## HD-035  Runs and Analytics filter by versions (multi-select) so creators can compare what works
+- When: 2026-10-04T04:50+03:00
+- Who: Dmitriy Elisov
+- Where: Claude Code session, review of the interface gallery
+- Decision: The Runs tab and the Analytics tab of an automation offer a multi-select filter by version. Runs shows only runs on the selected versions. Analytics shows the selected versions side by side (started, completed, completion rate, emails captured, failed) so the creator can see which version performs better.
+- Why: Versions are kept so that the creator can learn from them; comparison is the point.
+- Affects: runs query (version filter), analytics aggregation per version, UI filters, docs/design.md
+- Status: active
