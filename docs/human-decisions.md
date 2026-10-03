@@ -358,3 +358,12 @@ Format:
 - Why: Both situations happen and need different handling; the first depends on the network's messaging window.
 - Affects: wait_for_reply step schema (reminderAfter, reminderMessage, nudgeMessage, afterNudge), executor timers, capability record (whether a reminder is sendable before the first reply), editor
 - Status: active
+
+## HD-039  The mockups are branded "Boltato" with a galvanized steel bolt as the logo
+- When: 2026-10-04T05:40+03:00
+- Who: Dmitriy Elisov
+- Where: Claude Code session
+- Decision: The product name in the interface mockups is Boltato and the logo is a galvanized steel bolt. The visual language stays the one taken from the real product.
+- Why: A joke that also keeps the real brand out of the deliverable.
+- Affects: docs/mockups, later web package branding
+- Status: active
