@@ -349,3 +349,12 @@ Format:
 - Why: A repeated message reads as a bot and gets reported.
 - Affects: wait_for_reply step schema (nudgeMessage), executor, editor
 - Status: active
+
+## HD-038  The wait step handles "no reply at all" and "reply without the expected content" separately
+- When: 2026-10-04T05:25+03:00
+- Who: Dmitriy Elisov
+- Where: Claude Code session, review of the interface gallery
+- Decision: A wait step has two branches. If the person does not reply at all, the step may send one reminder after a chosen delay (its own text), and the run ends as expired after the give-up time. If the person replies without the expected content (for example no email address), the step asks once more with its own text, then keeps waiting or ends. The reminder branch is offered only on networks where a second message can be sent before the person replies; on Instagram and Facebook it cannot, and the editor says so in one line.
+- Why: Both situations happen and need different handling; the first depends on the network's messaging window.
+- Affects: wait_for_reply step schema (reminderAfter, reminderMessage, nudgeMessage, afterNudge), executor timers, capability record (whether a reminder is sendable before the first reply), editor
+- Status: active
