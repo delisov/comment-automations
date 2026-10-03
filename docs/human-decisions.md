@@ -331,3 +331,12 @@ Format:
 - Why: Versions are kept so that the creator can learn from them; comparison is the point.
 - Affects: runs query (version filter), analytics aggregation per version, UI filters, docs/design.md
 - Status: active
+
+## HD-036  Analytics shows reply rate
+- When: 2026-10-04T05:00+03:00
+- Who: Dmitriy Elisov
+- Where: Claude Code session, review of the interface gallery
+- Decision: Analytics shows the reply rate: the share of started runs in which the person answered the first message. It appears as a stat tile and as a column in the version comparison.
+- Why: Reply rate is the first signal of whether the opening message works; completion and email capture depend on it.
+- Affects: analytics aggregation (replied count per version), UI stats and comparison table
+- Status: active
