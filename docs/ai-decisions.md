@@ -151,3 +151,21 @@ Format:
 - Why: One code path for both modes is the point of the stand. The guard against test features in real mode is a startup check, so it cannot be forgotten. The shared secret is the smallest honest answer to plain HTTP between containers; mTLS or a service mesh would be the real product's decision and is out of scope.
 - Affects: service config module, gateway HTTP adapter, ingestion route, stand gateway API, docker-compose
 - Status: active
+
+## AD-016  Delivery plan v4 for the overnight build (2026-10-04)
+- When: 2026-10-04T06:10+03:00
+- Who: Claude (Fable 5.1), session ffba4ca6
+- Where: planning after HD-040 and HD-041
+- Decision: Run 2 `feat/contract-and-model`: packages/shared (capability records, definition and step types, matching, validation, property tests), packages/gateway-contract, packages/api-schema. Then three branches in parallel, each with its own builder and worktree, all built against those packages: `feat/stand` (stand service, worlds, rules, gateway contract, delivery, scenario API, clock, portal), `feat/service` (migrations, ingestion, matching, runs, executor, timers, automations API, accounts from the gateway, serves the web build), `feat/web` (product UI from the gallery). Then `feat/integration`: compose stack, seed, end-to-end check of the definition of done, test cycles. Then `docs/design-and-release`. Tier: Standard (one review run of three personas plus QA on the integrated stack) for service and integration; Light elsewhere. The orchestrator merges each PR once its gates are green (HD-040).
+- Why: The contract and the shared model are the only hard dependency; after them the three parts are independent until integration. Parallel builders are the only way to reach the definition of done in one night.
+- Affects: process
+- Status: active (supersedes AD-011)
+
+## AD-017  Architecture as built: see docs/architecture.md
+- When: 2026-10-04T06:10+03:00
+- Who: Claude (Fable 5.1), session ffba4ca6
+- Where: docs/architecture.md
+- Decision: Two services (api on 3000, stand on 3100) and one Postgres with schemas `app` and `stand`. Three shared packages: shared (model), gateway-contract (TypeBox for the gateway boundary), api-schema (TypeBox for the product API). The product UI is served as static files by the api service, the stand portal by the stand service. Runs carry a jsonb context; a partial unique index enforces one active run per (automation, contact); the queue is a jobs table drained with FOR UPDATE SKIP LOCKED against the injected clock. The first message on networks where the commenter is messageable only via private reply goes out as the private reply. Gateway error codes are the vocabulary both sides share. Full detail in docs/architecture.md, which every builder brief points to.
+- Why: Fixes the shapes before three builders start in parallel.
+- Affects: every package
+- Status: active
