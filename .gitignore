@@ -1,0 +1,10 @@
+node_modules/
+dist/
+coverage/
+.turbo/
+.env
+.env.local
+.env.*.local
+.claude/
+.secrets/
+*.log
