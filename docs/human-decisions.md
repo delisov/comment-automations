@@ -313,3 +313,12 @@ Format:
 - Why: Review needs the whole surface at once, not one happy-path screen.
 - Affects: docs/mockups/platform-gallery.html
 - Status: active
+
+## HD-034  Versions are immutable; revert activates an older version; edits always create a new version
+- When: 2026-10-04T04:20+03:00
+- Who: Dmitriy Elisov
+- Where: Claude Code session, review of the interface gallery
+- Decision: Every publish creates a new, immutable version. The UI has a window that lists all versions and lets the user make any previous version active. Making version 3 active while version 4 exists does not delete version 4. Editing the now-active version 3 and publishing creates version 5. Nothing is overwritten and nothing is deleted. Runs keep the version they started on.
+- Why: Full history and safe rollback; the same rule the backend already applies to runs.
+- Affects: automation_versions schema (active pointer separate from max version), publish and revert API, versions window in the UI, docs/design.md
+- Status: active
