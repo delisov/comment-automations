@@ -12,7 +12,9 @@ Three things in one service, plus a web interface:
 2. **The gateway side of the contract.** The stand implements the gateway HTTP API from `packages/gateway-contract`: the automation service calls it to reply to comments and send messages, and it calls the automation service's ingestion endpoint to deliver comment and message events, with knobs for duplicates, reordering, delay and bursts.
 3. **A scenario API.** Create accounts, posts and users; act as a user (comment, reply, message, change messaging settings); advance the clock (AD-013); read everything back.
 
-The web interface shows all accounts across networks, the posts and their comment threads, each account's inbox, and an event log of everything that crossed the contract in either direction. **User-emulation mode** lets a person pick an emulated user and act as them.
+The web interface (the portal) opens each social network separately and shows its accounts, its users, the posts with their comment threads, each account's inbox, and each user's direct messages. An event log shows everything that crossed the contract in either direction, with the gateway error returned for every refused call. **User-emulation mode** lets a person pick an emulated user and act as them: comment, reply, message, change messaging settings. The rule is visibility into every aspect (HD-026): if the service can do it, the portal shows it.
+
+The service runs in one of two modes (HD-026, AD-015). In `real` mode its HTTP gateway adapter calls the real gateway container; in `test` mode the same adapter calls the stand. The stand implements the gateway's HTTP contract, so nothing in the service changes between modes except the target URL, the clock and the test endpoints.
 
 ## 2. What it must make verifiable
 

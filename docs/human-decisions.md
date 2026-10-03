@@ -241,3 +241,12 @@ Format:
 - Why: The software cannot be verified against real platforms here, and a platform-rule violation must be visible as a failure, not a silent success. Expected to be about as much work as the service itself.
 - Affects: new packages for the stand and its web UI, the gateway contract package, run plan, docker-compose, README
 - Status: active
+
+## HD-026  Two modes: "real" and "test"; plain HTTP in both
+- When: 2026-10-04T02:15+03:00
+- Who: Dmitriy Elisov
+- Where: Claude Code session, chat message
+- Decision: The automation service runs in one of two modes. In "real" mode it talks over plain HTTP to the platform gateway, another container in the real product that does not exist yet. In "test" mode every call goes to the test stand instead. No TLS between services: TLS is offloaded at the edge. The stand's web portal opens each social network and shows its users, accounts, posts and comments, and each user's direct messages. Every aspect of what the service does must be visible there.
+- Why: The service must be verifiable end to end without the real gateway, and the same code path must serve both.
+- Affects: service configuration, gateway HTTP adapter, ingestion endpoint, stand portal, docs/design.md deployment section
+- Status: active

@@ -142,3 +142,12 @@ Format:
 - Why: The interface is test tooling, not product. A static SPA adds one build step and no server runtime to the compose stack. Next.js would add a second Node server and a heavier Docker build for no gain here.
 - Affects: packages/stand-web, packages/stand static serving, docker-compose
 - Status: active
+
+## AD-015  One HTTP adapter for both modes; mode selects the target, the clock and the test endpoints
+- When: 2026-10-04T02:20+03:00
+- Who: Claude (Fable 5.1), session ffba4ca6
+- Where: implementing HD-026
+- Decision: `GATEWAY_MODE` is `real` or `test`. Both modes use the same HTTP gateway adapter; `GATEWAY_URL` names the gateway service in `real` mode and the stand in `test` mode. `test` mode also enables the controlled clock (AD-013) and the test-only endpoints; `real` mode refuses to start if the controlled clock or test endpoints are enabled. The in-process fake adapter exists only for the service's own unit and integration tests and is not a mode. Service-to-service calls carry a shared-secret header in both directions (`X-Service-Token`, constant-time compared), because there is no TLS inside the cluster and the ingestion endpoint must not accept events from anyone who can reach the port.
+- Why: One code path for both modes is the point of the stand. The guard against test features in real mode is a startup check, so it cannot be forgotten. The shared secret is the smallest honest answer to plain HTTP between containers; mTLS or a service mesh would be the real product's decision and is out of scope.
+- Affects: service config module, gateway HTTP adapter, ingestion route, stand gateway API, docker-compose
+- Status: active
