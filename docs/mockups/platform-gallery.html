@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>DM automations · Screen gallery</title>
+<title>Boltato · DM automations · Screen gallery</title>
 <style>
   :root{
     --bg:#fff;--side:#f9fafb;--line:#e5e7eb;--text:#030712;--mute:#4b5563;--faint:#9ca3af;
@@ -35,7 +35,7 @@
   .app{display:grid;grid-template-columns:230px 1fr;min-height:640px;position:relative}
   .side{background:var(--side);border-right:1px solid var(--line);padding:18px 14px;display:flex;flex-direction:column}
   .brand{display:flex;align-items:center;gap:10px;padding:0 6px 14px}
-  .brand .logo{width:28px;height:28px;border-radius:50%;background:#fff;border:1px solid var(--line);display:grid;place-items:center;font-size:13px}
+  .brand .logo{width:30px;height:30px;border-radius:50%;background:#fff;border:1px solid var(--line);display:grid;place-items:center}
   .brand b{display:block;font-size:17px;line-height:1.1}
   .brand small{color:var(--nav-on);font-size:11px}
   .switch{font-size:12px;color:var(--mute);padding:6px 8px 14px;display:flex;justify-content:space-between}
@@ -205,8 +205,8 @@
 </head>
 <body>
 <header class="gh">
-  <h1>DM automations · Screen gallery</h1>
-  <p>Static states of the comment-triggered automation feature inside Blotato's Developer Platform. Data is illustrative. Each card is one page state. Diagnostics (gateway mode, clock) are shown once, as a floating pill that hides without changing the page.</p>
+  <h1>Boltato · DM automations · Screen gallery</h1>
+  <p>Static states of the comment-triggered automation feature inside Boltato's Developer Platform. Data is illustrative. Each card is one page state. Diagnostics (gateway mode, clock) are shown once, as a floating pill that hides without changing the page.</p>
   <input type="search" placeholder="Find a screen… (e.g. runs, bluesky, draft, expired)" oninput="document.querySelectorAll('.gc').forEach(s=>s.hidden=!s.dataset.label.includes(this.value.toLowerCase()))">
   <nav>
     <a href="#overview">Overview</a><a href="#new">New automation</a><a href="#editor">Editor</a><a href="#platforms">Editor per platform</a><a href="#states">Editor states</a><a href="#runs">Runs</a><a href="#analytics">Analytics</a><a href="#accounts">Accounts</a><a href="#system">System states</a><a href="#wiki-ig">Wiki</a><a href="#versions">Versions</a>
@@ -235,7 +235,7 @@ const plat = (p, text) => `<span class="plat ${p.k}"><i>${p.l}</i>${text ?? p.ac
 function frame({active='DM automations', body, overlay='', note=''}) {
   return `<div class="app">
     <aside class="side">
-      <div class="brand"><div class="logo">🥔</div><div><b>Blotato</b><small>Developer Platform</small></div></div>
+      <div class="brand"><div class="logo"><svg viewBox="0 0 28 28" width="28" height="28" aria-label="Boltato"><defs><linearGradient id="zn" x1="0" x2="1"><stop offset="0" stop-color="#d9dde3"/><stop offset=".5" stop-color="#f3f5f7"/><stop offset="1" stop-color="#9aa3ad"/></linearGradient></defs><rect x="4" y="3" width="20" height="8" rx="1.5" fill="url(#zn)" stroke="#6b7280" stroke-width="1"/><path d="M8 3v8M14 3v8M20 3v8" stroke="#8b949e" stroke-width=".8"/><rect x="10" y="11" width="8" height="14" fill="url(#zn)" stroke="#6b7280" stroke-width="1"/><path d="M10 14h8M10 17h8M10 20h8M10 23h8" stroke="#6b7280" stroke-width="1"/></svg></div><div><b>Boltato</b><small>Developer Platform</small></div></div>
       <div class="switch"><span>✦ Switch to Content Studio</span><span>↗</span></div>
       <div class="navsec">Platform</div>
       <div class="nav">${NAV.map(n=>`<a class="${n===active?'on':''}">${ico(n)}${n}${n==='Tools'?'<span class="chev">›</span>':''}</a>`).join('')}</div>
