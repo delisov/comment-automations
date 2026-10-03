@@ -178,3 +178,66 @@ Format:
 - Why: not stated (chosen over Instagram-only code with a platform column). The AI flagged that this can hide the constraints that make the problem hard; see AD-008 for how that tension is resolved.
 - Affects: packages/shared provider interface, packages/api providers/, executor, docs/design.md
 - Status: active
+
+## HD-019  Assess every candidate platform before writing more code
+- When: 2026-10-04T00:55+03:00
+- Who: Dmitriy Elisov
+- Where: Claude Code session, chat message
+- Decision: Stop implementation. First assess all platforms where comment-triggered automations could run: which expose comment events, public replies, private replies and direct messages through their APIs, under which rules. The assessment feeds the design before any further run.
+- Why: The platform set and its constraints decide the shape of the abstraction.
+- Affects: docs/design.md, provider layer, run plan (AD-009 is paused)
+- Status: active
+
+## HD-020  Model the "already existing app" as an abstract layer
+- When: 2026-10-04T00:55+03:00
+- Who: Dmitriy Elisov
+- Where: Claude Code session, chat message
+- Decision: The brief says the system already receives comments and messages, replies to comments, and sends messages. Treat that existing system as an abstract layer with those four capabilities. The automation system is built on top of that layer and never re-implements it.
+- Why: Keeps the design within the brief's stated assumptions and separates what exists from what is being designed.
+- Affects: packages/shared port types, executor, docs/design.md, the fake implementation in tools/
+- Status: active
+
+## HD-021  The hard problem is the structured handling of platform limits and features
+- When: 2026-10-04T01:10+03:00
+- Who: Dmitriy Elisov
+- Where: Claude Code session, chat message
+- Decision: The design centres on a structured model of each platform's capabilities and limits (which events exist, what replies and messages are allowed, within which windows, to whom). Webhook plumbing is secondary. Every automation is checked against that model when published and enforced against it when run.
+- Why: Platform rules differ in kind, not only in numbers. A flow that is legal on Instagram is impossible on YouTube. Treating this as data makes the differences visible, testable and explainable.
+- Affects: docs/platforms.md, packages/shared capability model, publish-time validation, executor, docs/design.md
+- Status: active
+
+## HD-022  One executable platform per class first, then testing tooling, then more platforms
+- When: 2026-10-04T01:20+03:00
+- Who: Dmitriy Elisov
+- Where: Claude Code session, structured question
+- Decision: Implement every platform class with at least one executable provider first (class A Instagram, class B Bluesky, class C YouTube, class E WhatsApp; class D has no comment events and stays declared only). Then build dedicated testing tooling and test the whole extensively. Only after that add further platforms.
+- Why: Proves the capability model end to end before widening it.
+- Affects: providers, capability records, tools/ (testing tooling), run plan
+- Status: active
+
+## HD-023  Microservices in Kubernetes; the gateway is found by service discovery
+- When: 2026-10-04T01:20+03:00
+- Who: Dmitriy Elisov
+- Where: Claude Code session, structured question
+- Decision: Assume the real product is a set of microservices in a Kubernetes cluster. The platform gateway (the existing app) is another service reachable by service discovery. The automation system talks to it through an interface with two adapters: a fake for tests and the demo, and an HTTP adapter that mimics calls to a real gateway behind it.
+- Why: This is how the real product is believed to look.
+- Affects: gateway port and adapters, ingestion endpoint, docs/design.md deployment section, docker-compose (fake gateway as its own service)
+- Status: active
+
+## HD-024  Class B recipient fallback is fully implemented now
+- When: 2026-10-04T01:20+03:00
+- Who: Dmitriy Elisov
+- Where: Claude Code session, structured question
+- Decision: Every `send_message` step on a class B platform carries `onRecipientUnreachable` with `fail`, `skip` or `publicReplyInstead`. Publish-time validation requires it; the executor implements all three; tests cover them against the fake gateway.
+- Why: not stated
+- Affects: automation schema, validation, executor, tests
+- Status: active
+
+## HD-025  Build a real test stand that emulates the social platforms
+- When: 2026-10-04T01:40+03:00
+- Who: Dmitriy Elisov
+- Where: Claude Code session, chat message
+- Decision: Build a test stand on the other side of the automation service. It emulates every supported platform with accounts, posts and users; emulated users leave comments and write direct messages; it implements every hook and endpoint the gateway side has. It runs test cycles. It has a web interface that shows all accounts across the networks and lets a person enter user-emulation mode and act as that user. Everything the automation service can do must be observable and verifiable on the stand, in simplified form.
+- Why: The software cannot be verified against real platforms here, and a platform-rule violation must be visible as a failure, not a silent success. Expected to be about as much work as the service itself.
+- Affects: new packages for the stand and its web UI, the gateway contract package, run plan, docker-compose, README
+- Status: active
