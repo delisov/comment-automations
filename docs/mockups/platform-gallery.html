@@ -1,0 +1,636 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Boltato · DM automations · Screen gallery</title>
+<style>
+  :root{
+    --bg:#fff;--side:#f9fafb;--line:#e5e7eb;--text:#030712;--mute:#4b5563;--faint:#9ca3af;
+    --primary:#7c3aed;--primary-h:#6d28d9;--primary-0:#f5f3ff;--primary-1:#ede9fe;
+    --nav-on-bg:#eff6ff;--nav-on:#2563eb;
+    --ok:#15803d;--ok-bg:#dcfce7;--warn:#b45309;--warn-bg:#fff7ed;--warn-line:#fed7aa;--bad:#b91c1c;--bad-bg:#fef2f2;--bad-line:#fecaca;
+    --info:#1d4ed8;--info-bg:#eff6ff;--wait:#6d28d9;--wait-bg:#ede9fe;--gray-bg:#f3f4f6;
+    --font:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:#eef0f4;font-family:var(--font);color:var(--text);font-size:14px;line-height:1.45;-webkit-font-smoothing:antialiased}
+  /* gallery chrome */
+  .gh{position:sticky;top:0;z-index:50;background:#fffffff2;backdrop-filter:blur(12px);border-bottom:1px solid #d9dde5;padding:14px 24px}
+  .gh h1{font-size:18px;margin:0 0 4px}
+  .gh p{margin:0 0 10px;color:var(--mute);font-size:13px;max-width:900px}
+  .gh input{width:min(520px,100%);padding:9px 12px;border:1px solid #cfd5df;border-radius:8px;font:inherit}
+  .gh nav{display:flex;gap:14px;flex-wrap:wrap;margin-top:8px;font-size:12px}
+  .gh nav a{color:var(--nav-on);text-decoration:none}
+  .gm{max-width:1360px;margin:24px auto;padding:0 20px}
+  .gc{background:#fff;border:1px solid #d9dde5;border-radius:14px;margin:22px 0;overflow:hidden;scroll-margin-top:140px}
+  .gc>header{display:flex;justify-content:space-between;align-items:center;gap:14px;padding:12px 18px;background:#f7f8fb;border-bottom:1px solid #d9dde5}
+  .gc>header h2{font-size:13px;margin:0;font-weight:600}
+  .gc>header span{font-size:12px;color:var(--mute)}
+  .gc[hidden]{display:none}
+  .gs{padding:0;background:#fff}
+  .gs-note{padding:10px 18px;background:#fbfbfd;border-top:1px solid #eceef3;color:var(--mute);font-size:12px}
+  /* app frame */
+  .app{display:grid;grid-template-columns:230px 1fr;min-height:640px;position:relative}
+  .side{background:var(--side);border-right:1px solid var(--line);padding:18px 14px;display:flex;flex-direction:column}
+  .brand{display:flex;align-items:center;gap:10px;padding:0 6px 14px}
+  .brand .logo{width:30px;height:30px;border-radius:50%;background:#fff;border:1px solid var(--line);display:grid;place-items:center}
+  .brand b{display:block;font-size:17px;line-height:1.1}
+  .brand small{color:var(--nav-on);font-size:11px}
+  .switch{font-size:12px;color:var(--mute);padding:6px 8px 14px;display:flex;justify-content:space-between}
+  .navsec{font-size:10px;letter-spacing:.08em;color:var(--mute);padding:6px 8px;text-transform:uppercase}
+  .nav a{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:8px;color:var(--mute);font-weight:500;text-decoration:none;font-size:14px}
+  .nav a.on{background:var(--nav-on-bg);color:var(--nav-on)}
+  .nav a svg{flex:none;opacity:.85}
+  .nav a .chev{margin-left:auto;color:var(--faint)}
+  .main{padding:26px 32px 40px;min-width:0}
+  .ph{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:18px}
+  .ph h1{font-size:30px;font-weight:600;margin:0;letter-spacing:-.01em}
+  .ph .sub{color:var(--mute);margin-top:4px;font-size:15px}
+  .crumbs{font-size:13px;color:var(--mute);margin-bottom:6px}
+  .crumbs a{color:var(--nav-on);text-decoration:none}
+  .btn{display:inline-flex;align-items:center;gap:8px;padding:9px 16px;border-radius:8px;border:1px solid transparent;background:var(--primary);color:#fff;font-weight:600;font-size:14px;cursor:pointer;white-space:nowrap}
+  .btn.sec{background:#fff;color:var(--text);border-color:var(--line)}
+  .btn.ghost{background:transparent;color:var(--mute);border-color:transparent}
+  .btn.danger{background:#dc2626}
+  .btn.dis{background:#f3f4f6;color:#9ca3af;cursor:default}
+  .btn.sm{padding:6px 12px;font-size:13px}
+  .row{display:flex;align-items:center;gap:10px}
+  .tabs{display:flex;gap:28px;border-bottom:1px solid var(--line);margin:4px 0 22px}
+  .tabs span{padding:10px 2px;color:var(--text);font-weight:500}
+  .tabs span.on{color:var(--nav-on);border-bottom:2px solid var(--nav-on)}
+  .card{border:1px solid var(--line);border-radius:12px;background:#fff;padding:18px 20px;margin-bottom:16px}
+  .card h3{margin:0 0 12px;font-size:16px;font-weight:600}
+  .card .hint{color:var(--mute);font-size:13px}
+  .pill{display:inline-flex;align-items:center;gap:6px;padding:4px 11px;border-radius:999px;font-size:13px;font-weight:600;background:var(--gray-bg);color:var(--mute)}
+  .pill.ok{background:var(--ok-bg);color:var(--ok)} .pill.bad{background:var(--bad-bg);color:var(--bad)} .pill.warn{background:var(--warn-bg);color:var(--warn)} .pill.wait{background:var(--wait-bg);color:var(--wait)} .pill.info{background:var(--info-bg);color:var(--info)}
+  table{width:100%;border-collapse:collapse}
+  .tbl{border:1px solid var(--line);border-radius:12px;overflow:hidden;background:#fff}
+  th{background:#f9fafb;text-align:left;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--mute);font-weight:600;padding:14px 16px;border-bottom:1px solid var(--line)}
+  td{padding:14px 16px;border-bottom:1px solid var(--line);font-size:15px;vertical-align:middle}
+  tr:last-child td{border-bottom:0}
+  td .sub{display:block;color:var(--mute);font-size:13px;margin-top:2px}
+  .mono{font-family:var(--mono);font-size:13px;color:var(--mute)}
+  .plat{display:inline-flex;align-items:center;gap:9px}
+  .plat i{width:22px;height:22px;border-radius:5px;display:inline-grid;place-items:center;color:#fff;font-size:10px;font-weight:700;flex:none}
+  .ig i{background:#d6249f}.fb i{background:#1877f2}.th i{background:#111}.x i{background:#000}.bs i{background:#1185fe}.yt i{background:#ff0000}.li i{background:#0a66c2}.wa i{background:#25d366}.tt i{background:#111}.pi i{background:#e60023}
+  .callout{border-radius:10px;padding:14px 16px;font-size:14px;line-height:1.5}
+  .callout b{display:block;margin-bottom:4px}
+  .callout.warn{background:var(--warn-bg);color:#7c2d12}.callout.warn b{color:#c2410c}
+  .callout.bad{background:var(--bad-bg);color:#7f1d1d}.callout.bad b{color:#b91c1c}
+  .callout.info{background:var(--info-bg);color:#1e3a8a}.callout.info b{color:#1d4ed8}
+  .callout.ok{background:var(--ok-bg);color:#14532d}.callout.ok b{color:#15803d}
+  .empty{border:1px solid var(--line);border-radius:12px;padding:48px 20px;text-align:center}
+  .empty h3{margin:0 0 6px;font-size:17px}.empty p{margin:0 0 18px;color:var(--mute)}
+  .field{margin-bottom:14px}
+  .field label{display:block;font-weight:600;font-size:14px;margin-bottom:6px}
+  .field .desc{color:var(--mute);font-size:13px;margin-bottom:6px}
+  .input{display:block;width:100%;max-width:560px;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:#fff;font:inherit;font-size:14px;color:var(--text)}
+  .input.ta{min-height:76px;white-space:pre-wrap}
+  .input.err{border-color:#dc2626;background:#fff7f7}
+  .errtext{color:#b91c1c;font-size:13px;margin-top:5px}
+  .counter{font-size:12px;color:var(--faint);margin-top:4px;text-align:right;max-width:560px}
+  .kw{display:flex;flex-wrap:wrap;gap:6px;max-width:560px;padding:8px 10px;border:1px solid var(--line);border-radius:8px}
+  .kw span{background:var(--primary-1);color:var(--primary-h);border-radius:6px;padding:3px 9px;font-size:13px;font-weight:500}
+  .kw .kwph{color:var(--faint);font-size:13px;margin:3px 0 0 2px}
+  .seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+  .seg span{padding:7px 14px;font-size:13px;color:var(--mute)}
+  .seg span.on{background:var(--primary);color:#fff;font-weight:600}
+  .chk{display:flex;align-items:center;gap:10px;font-size:14px;margin:6px 0}
+  .chk i{width:18px;height:18px;border:1.5px solid #9ca3af;border-radius:4px;display:inline-grid;place-items:center;font-size:12px}
+  .chk i.on{background:var(--primary);border-color:var(--primary);color:#fff}
+  .tog{width:38px;height:22px;border-radius:999px;background:#d1d5db;position:relative;display:inline-block;flex:none}
+  .tog::after{content:"";position:absolute;top:3px;left:3px;width:16px;height:16px;border-radius:50%;background:#fff}
+  .tog.on{background:var(--primary)}.tog.on::after{left:19px}
+  .steps{display:flex;flex-direction:column;gap:10px}
+  .step{border:1px solid var(--line);border-radius:12px;padding:14px 16px;background:#fff;position:relative}
+  .step .t{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+  .step .t b{font-size:15px}
+  .step .t .act{display:flex;gap:6px;color:var(--faint);font-size:13px}
+  .step .n{width:24px;height:24px;border-radius:50%;background:var(--gray-bg);color:var(--mute);font-size:12px;font-weight:600;display:inline-grid;place-items:center;margin-right:8px}
+  .step .msg{background:#f9fafb;border-radius:8px;padding:10px 12px;font-size:14px;white-space:pre-wrap;max-width:560px}
+  .step .btnlike{display:inline-block;margin:8px 6px 0 0;border:1px solid #c4b5fd;color:#5b21b6;border-radius:8px;padding:5px 12px;font-size:13px;font-weight:600}
+  .step .meta{color:var(--mute);font-size:13px;margin-top:8px}
+  .connector{height:14px;border-left:2px solid var(--line);margin-left:27px}
+  .addstep{border:1px dashed #c4b5fd;color:var(--primary-h);border-radius:12px;padding:12px;text-align:center;font-weight:600;font-size:14px;background:var(--primary-0)}
+  .menu{position:absolute;left:0;right:0;top:46px;background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:0 10px 25px rgba(0,0,0,.1);padding:8px;z-index:3;max-width:360px;margin:0 auto;text-align:left}
+  .menu div{padding:10px 12px;border-radius:8px;font-size:14px}
+  .menu div b{display:block;font-size:14px}.menu div small{color:var(--mute);font-size:12px}
+  .menu div.hov{background:var(--gray-bg)}
+  .modal-bg{position:absolute;inset:0;background:rgba(3,7,18,.45);display:grid;place-items:center;z-index:5}
+  .modal{width:520px;max-width:92%;background:#fff;border-radius:14px;padding:24px;box-shadow:0 20px 40px rgba(0,0,0,.2)}
+  .modal h3{margin:0 0 4px;font-size:18px}.modal p{margin:0 0 16px;color:var(--mute);font-size:14px}
+  .modal .foot{display:flex;justify-content:flex-end;gap:10px;margin-top:18px}
+  .select{display:flex;justify-content:space-between;align-items:center;padding:10px 12px;border:1px solid var(--line);border-radius:8px;max-width:560px;font-size:14px}
+  .select.open{border-color:var(--primary)}
+  .opts{border:1px solid var(--line);border-radius:10px;margin-top:6px;max-width:560px;box-shadow:0 10px 25px rgba(0,0,0,.08);overflow:hidden}
+  .opts div{padding:10px 12px;display:flex;justify-content:space-between;align-items:center;font-size:14px}
+  .opts div.hov{background:var(--gray-bg)}
+  .opts div.dis{color:var(--faint)}
+  .opts small{color:var(--faint);font-size:12px}
+  .drawer{position:absolute;top:0;right:0;bottom:0;width:480px;background:#fff;border-left:1px solid var(--line);box-shadow:-10px 0 30px rgba(0,0,0,.08);padding:22px 24px;z-index:4;overflow:auto}
+  .drawer h3{margin:0 0 2px;font-size:18px}
+  .drawer .close{position:absolute;right:18px;top:18px;color:var(--faint)}
+  .tl{list-style:none;padding:0;margin:14px 0 0}
+  .tl li{position:relative;padding:8px 0 8px 22px;font-size:14px;border-left:2px solid var(--line);margin-left:6px}
+  .tl li::before{content:"";position:absolute;left:-6px;top:14px;width:10px;height:10px;border-radius:50%;background:#9ca3af}
+  .tl li.ok::before{background:#16a34a}.tl li.wait::before{background:#7c3aed}.tl li.bad::before{background:#dc2626}.tl li.mute::before{background:#d1d5db}
+  .tl time{display:block;font-size:12px;color:var(--faint)}
+  .kv{display:grid;grid-template-columns:150px 1fr;gap:6px 12px;font-size:14px;margin-top:10px}
+  .kv span:nth-child(odd){color:var(--mute)}
+  .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:18px}
+  .stat{border:1px solid var(--line);border-radius:12px;padding:16px 18px}
+  .stat b{font-size:26px;font-weight:600;display:block}.stat span{color:var(--mute);font-size:13px}
+  .chart{height:140px;border:1px solid var(--line);border-radius:12px;display:flex;align-items:flex-end;gap:6px;padding:14px}
+  .chart i{flex:1;background:#c4b5fd;border-radius:4px 4px 0 0;display:block}
+  .toast{position:absolute;right:24px;bottom:24px;background:#111827;color:#fff;border-radius:10px;padding:12px 16px;font-size:14px;box-shadow:0 10px 25px rgba(0,0,0,.2);z-index:6}
+  .toast.ok{background:#14532d}.toast.bad{background:#7f1d1d}
+  .skel{height:14px;border-radius:6px;background:linear-gradient(90deg,#f3f4f6,#e5e7eb,#f3f4f6);margin:8px 0}
+  .diag{position:absolute;left:50%;transform:translateX(-50%);bottom:14px;background:#111;color:#ffd479;border:1px dashed #ffb020;border-radius:999px;padding:7px 14px;font:12px var(--mono);z-index:7;display:flex;gap:14px;align-items:center;opacity:.95}
+  .diag em{color:#9ca3af;font-style:normal}
+  .diag .x{color:#fff;cursor:pointer}
+  .helpbubble{position:absolute;right:22px;bottom:22px;width:48px;height:48px;border-radius:50%;background:#f59e0b;box-shadow:0 6px 16px rgba(0,0,0,.2)}
+  .verlist div{display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--line);font-size:14px}
+  .verlist div:last-child{border-bottom:0}
+  .verlist small{color:var(--mute)}
+  .dim{opacity:.55}
+
+  /* wiki modal */
+  .wiki{width:1120px;max-width:96%;height:640px;max-height:92%;background:#fff;border-radius:14px;box-shadow:0 20px 40px rgba(0,0,0,.25);display:grid;grid-template-columns:280px 1fr;overflow:hidden;position:relative}
+  .wnav{background:#f9fafb;border-right:1px solid var(--line);padding:16px 10px;overflow:auto}
+  .wnav .wtitle{font-weight:600;font-size:15px;padding:6px 10px 12px;color:var(--text)}
+  .wnav .wsub{font-size:12px;color:var(--mute);padding:0 10px 10px}
+  .wnav div[data-i]{padding:8px 10px;border-radius:8px;color:var(--mute);font-size:14px;cursor:pointer;margin-bottom:2px}
+  .wnav div[data-i]:hover{background:#f3f4f6}
+  .wnav div[data-i].on{background:var(--nav-on-bg);color:var(--nav-on);font-weight:600}
+  .wart{padding:26px 34px 30px;overflow:auto;font-size:15px;line-height:1.6}
+  .wart h2{margin:0 0 14px;font-size:22px;font-weight:600}
+  .wart p{margin:0 0 12px}
+  .wart ul,.wart ol{margin:0 0 12px;padding-left:22px}
+  .wart li{margin-bottom:6px}
+  .wart .wfoot{margin-top:26px;padding-top:12px;border-top:1px solid var(--line);color:var(--faint);font-size:12px}
+  .wclose{position:absolute;right:16px;top:12px;color:var(--faint);cursor:pointer;font-size:16px}
+  .subrow{display:flex;justify-content:space-between;align-items:center;margin:-12px 0 18px}
+  .wikilink{display:inline-block;font-size:13px;color:var(--mute);text-decoration:underline dotted;text-underline-offset:4px;cursor:pointer}
+  .wikilink:hover{color:var(--nav-on)}
+  .wikilink.book::before{content:"📖 "}
+
+  /* versions window */
+  .vers{width:860px;max-width:94%;background:#fff;border-radius:14px;box-shadow:0 20px 40px rgba(0,0,0,.25);padding:22px 24px;position:relative}
+  .vers h3{margin:0 0 4px;font-size:18px}
+  .vers .hint{margin-bottom:14px}
+  .vers table td{font-size:14px;padding:12px 14px}
+  .vers table th{padding:10px 14px}
+  .vers .act{display:flex;gap:8px;justify-content:flex-end;white-space:nowrap}
+  .vers table th:last-child,.vers table td:last-child{width:210px}
+  .vbanner{border-radius:10px;padding:12px 16px;font-size:14px;display:flex;align-items:center;gap:12px;margin-bottom:16px;background:#fff7ed;color:#7c2d12;border:1px solid #fed7aa}
+  .vbanner b{color:#c2410c}
+  .vbanner .spacer{flex:1}
+
+  /* version multi-select */
+  .vsel{position:relative;display:inline-block}
+  .vsel .trig{display:inline-flex;align-items:center;gap:8px;padding:6px 12px;border:1px solid var(--line);border-radius:8px;font-size:13px;background:#fff}
+  .vsel .trig.on{border-color:var(--primary);color:var(--primary-h);font-weight:600;background:var(--primary-0)}
+  .vsel .dd{position:absolute;top:36px;left:0;z-index:4;background:#fff;border:1px solid var(--line);border-radius:10px;box-shadow:0 10px 25px rgba(0,0,0,.1);padding:8px;width:280px}
+  .vsel .dd div{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;font-size:14px}
+  .vsel .dd div:hover{background:var(--gray-bg)}
+  .vsel .dd small{margin-left:auto;color:var(--faint);font-size:12px}
+  .vsel .dd .foot{justify-content:space-between;border-top:1px solid var(--line);margin-top:6px;padding-top:10px;color:var(--nav-on);font-size:13px}
+  .cmp td.best{background:#f0fdf4;font-weight:600}
+  .chart i.b{background:#7c3aed}
+  .legend{display:flex;gap:16px;font-size:13px;color:var(--mute);margin-top:8px}
+  .legend i{display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:6px;vertical-align:-1px}
+</style>
+</head>
+<body>
+<header class="gh">
+  <h1>Boltato · DM automations · Screen gallery</h1>
+  <p>Static states of the comment-triggered automation feature inside Boltato's Developer Platform. Data is illustrative. Each card is one page state. Diagnostics (gateway mode, clock) are shown once, as a floating pill that hides without changing the page.</p>
+  <input type="search" placeholder="Find a screen… (e.g. runs, bluesky, draft, expired)" oninput="document.querySelectorAll('.gc').forEach(s=>s.hidden=!s.dataset.label.includes(this.value.toLowerCase()))">
+  <nav>
+    <a href="#overview">Overview</a><a href="#new">New automation</a><a href="#editor">Editor</a><a href="#platforms">Editor per platform</a><a href="#states">Editor states</a><a href="#runs">Runs</a><a href="#analytics">Analytics</a><a href="#accounts">Accounts</a><a href="#system">System states</a><a href="#wiki-ig">Wiki</a><a href="#versions">Versions</a>
+  </nav>
+</header>
+<main class="gm" id="gallery"></main>
+
+<script>
+const NAV = ['Overview','Calendar','Analytics','Posts','Logs','Videos','Inbox','DM automations','Accounts','Tools','Settings'];
+const ICON = {"Overview": "<path d=\"M3 12a9 9 0 0 1 18 0\"/><path d=\"M12 12l4-4\"/>", "Calendar": "<rect x=\"3\" y=\"5\" width=\"18\" height=\"16\" rx=\"2\"/><path d=\"M3 10h18M8 3v4M16 3v4\"/>", "Analytics": "<path d=\"M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z\"/><circle cx=\"12\" cy=\"12\" r=\"3\"/>", "Posts": "<path d=\"M6 3h8l4 4v14H6z\"/><path d=\"M14 3v4h4M9 13h6M9 17h6\"/>", "Logs": "<path d=\"M4 6c4 0 4 12 8 12s4-12 8-12\"/>", "Videos": "<rect x=\"3\" y=\"7\" width=\"13\" height=\"10\" rx=\"2\"/><path d=\"M16 11l5-3v8l-5-3z\"/>", "Inbox": "<path d=\"M3 13l2-8h14l2 8v6H3z\"/><path d=\"M3 13h5l2 3h4l2-3h5\"/>", "DM automations": "<path d=\"M4 5h16v11H9l-5 4z\"/><path d=\"M8 9h8M8 12h5\"/>", "Accounts": "<circle cx=\"9\" cy=\"8\" r=\"3\"/><circle cx=\"17\" cy=\"9\" r=\"2.5\"/><path d=\"M3 20c0-3 3-5 6-5s6 2 6 5M15 20c0-2 2-4 4-4\"/>", "Tools": "<path d=\"M9 3h6M10 3v6l-5 9a2 2 0 0 0 2 3h10a2 2 0 0 0 2-3l-5-9V3\"/>", "Settings": "<circle cx=\"12\" cy=\"12\" r=\"3\"/><path d=\"M19 12a7 7 0 0 0-.1-1.2l2-1.5-2-3.4-2.3 1a7 7 0 0 0-2-1.2L14 3h-4l-.6 2.7a7 7 0 0 0-2 1.2l-2.3-1-2 3.4 2 1.5A7 7 0 0 0 5 12c0 .4 0 .8.1 1.2l-2 1.5 2 3.4 2.3-1a7 7 0 0 0 2 1.2L10 21h4l.6-2.7a7 7 0 0 0 2-1.2l2.3 1 2-3.4-2-1.5c.1-.4.1-.8.1-1.2z\"/>"};
+const ico = n => `<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${ICON[n]||''}</svg>`;
+const P = {
+  ig:{k:'ig',l:'IG',name:'Instagram',acct:'@oqtastore',cls:'A'},
+  fb:{k:'fb',l:'f',name:'Facebook Page',acct:'Oqtastore',cls:'A'},
+  th:{k:'th',l:'@',name:'Threads',acct:'@oqtastore',cls:'C'},
+  x:{k:'x',l:'X',name:'X',acct:'@oqtastore',cls:'B'},
+  bs:{k:'bs',l:'bs',name:'Bluesky',acct:'@oqtastore.bsky.social',cls:'B'},
+  yt:{k:'yt',l:'▶',name:'YouTube',acct:'Oqtastore',cls:'C'},
+  li:{k:'li',l:'in',name:'LinkedIn Page',acct:'Oqtastore',cls:'C'},
+  wa:{k:'wa',l:'W',name:'WhatsApp Business',acct:'+40 784 …',cls:'E'},
+  tt:{k:'tt',l:'TT',name:'TikTok Business',acct:'@oqtastore',cls:'E'},
+  pi:{k:'pi',l:'P',name:'Pinterest',acct:'oqtastore',cls:'D'},
+};
+const plat = (p, text) => `<span class="plat ${p.k}"><i>${p.l}</i>${text ?? p.acct}</span>`;
+
+function frame({active='DM automations', body, overlay='', note=''}) {
+  return `<div class="app">
+    <aside class="side">
+      <div class="brand"><div class="logo"><svg viewBox="0 0 28 28" width="28" height="28" aria-label="Boltato"><defs><linearGradient id="zn" x1="0" x2="1"><stop offset="0" stop-color="#d9dde3"/><stop offset=".5" stop-color="#f3f5f7"/><stop offset="1" stop-color="#9aa3ad"/></linearGradient></defs><rect x="4" y="3" width="20" height="8" rx="1.5" fill="url(#zn)" stroke="#6b7280" stroke-width="1"/><path d="M8 3v8M14 3v8M20 3v8" stroke="#8b949e" stroke-width=".8"/><rect x="10" y="11" width="8" height="14" fill="url(#zn)" stroke="#6b7280" stroke-width="1"/><path d="M10 14h8M10 17h8M10 20h8M10 23h8" stroke="#6b7280" stroke-width="1"/></svg></div><div><b>Boltato</b><small>Developer Platform</small></div></div>
+      <div class="switch"><span>✦ Switch to Content Studio</span><span>↗</span></div>
+      <div class="navsec">Platform</div>
+      <div class="nav">${NAV.map(n=>`<a class="${n===active?'on':''}">${ico(n)}${n}${n==='Tools'?'<span class="chev">›</span>':''}</a>`).join('')}</div>
+    </aside>
+    <div class="main">${body}</div>
+    ${overlay}
+  </div>${note?`<div class="gs-note">${note}</div>`:''}`;
+}
+const header = (title, sub, actions='') => `<div class="ph"><div><h1>${title}</h1><div class="sub">${sub}</div></div><div class="row">${actions}</div></div>`;
+const crumbs = (name) => `<div class="crumbs"><a>DM automations</a> / ${name}</div>`;
+const tabs = (on) => `<div class="tabs">${['Editor','Runs','Analytics'].map(t=>`<span class="${t===on?'on':''}">${t}</span>`).join('')}</div>`;
+
+const LIST_ROWS = [
+  ['Pricing lead capture', plat(P.ig), 'Comment · pricing, price, how much', '<span class="pill ok">Live</span>', '38','29','1','2 min ago'],
+  ['Free guide on GUIDE', plat(P.fb), 'Comment · guide', '<span class="pill ok">Live</span>', '12','12','0','1 h ago'],
+  ['Thank every commenter', plat(P.yt), 'Comment · any', '<span class="pill ok">Live</span>', '140','140','0','4 min ago'],
+  ['Bluesky pricing', plat(P.bs), 'Comment · pricing', '<span class="pill">Draft</span>', '—','—','—','—'],
+  ['Catalog on request', plat(P.wa), 'Message · catalog', '<span class="pill ok">Live</span>', '7','7','0','20 min ago'],
+  ['Launch day replies', plat(P.th), 'Comment · launch', '<span class="pill warn">Paused</span>', '0','—','—','yesterday'],
+];
+const listTable = (rows) => `<div class="tbl"><table><thead><tr><th>Automation</th><th>Account</th><th>Trigger</th><th>State</th><th>Runs 24h</th><th>Success</th><th>Failed</th><th>Last run</th><th></th></tr></thead><tbody>${rows.map(r=>`<tr><td><b>${r[0]}</b></td><td>${r[1]}</td><td class="mono">${r[2]}</td><td>${r[3]}</td><td>${r[4]}</td><td>${r[5]}</td><td>${r[6]==='1'?'<span style="color:#b91c1c">1</span>':r[6]}</td><td class="mono">${r[7]}</td><td style="color:#9ca3af">⋯</td></tr>`).join('')}</tbody></table></div>`;
+
+/* ---------- editor pieces ---------- */
+const stepReply = (n, text='Sent you a DM! 📩') => `<div class="step"><div class="t"><span><span class="n">${n}</span><b>Reply to the comment</b></span><span class="act">⋮</span></div><div class="msg">${text}</div></div>`;
+const stepDM = (n, title, text, buttons=[], extra='') => `<div class="step"><div class="t"><span><span class="n">${n}</span><b>${title}</b></span><span class="act">⋮</span></div><div class="msg">${text}</div>${buttons.map(b=>`<span class="btnlike">${b}</span>`).join('')}${extra}</div>`;
+const stepWait = (n, what='an email address', hours='72', nudge='No worries! Just the email address is enough, e.g. name@example.com', o={}) => { const reminder = o.reminder !== false; const rh = o.reminderHours || '12'; const rt = o.reminderText || 'Still want the pricing sheet? Reply with your email and I’ll send it right over.'; const noun = what==='a reply' ? 'an answer' : 'an email';
+  return `<div class="step"><div class="t"><span><span class="n">${n}</span><b>Wait for ${what}</b></span><span class="act">⋮</span></div>
+  <div class="field" style="margin:0 0 14px"><label style="font-weight:600;font-size:13px">If they don’t reply at all</label>
+    ${reminder ? `<div class="row" style="gap:10px;flex-wrap:wrap"><span>after</span><span class="select" style="width:130px">${rh} hours <span>▾</span></span><span class="select" style="width:200px">send a reminder once <span>▾</span></span></div><div class="msg" style="max-width:560px;margin-top:8px">${rt}</div><div class="counter">${rt.length} / 1,000</div>`
+               : `<div class="hint">Wait for their first reply. ${o.platformName || 'This network'} lets you message again only after they write back.</div>`}
+    <div class="row" style="gap:10px;margin-top:8px"><span>Give up after</span><span class="select" style="width:130px">${hours} hours <span>▾</span></span><span class="hint">· the run ends as expired</span></div>
+  </div>
+  <div class="field" style="margin:0"><label style="font-weight:600;font-size:13px">If they reply without ${noun}</label>
+    <div class="row" style="gap:10px;flex-wrap:wrap"><span class="select" style="width:150px">Ask once more <span>▾</span></span><span>then</span><span class="select" style="width:170px">keep waiting <span>▾</span></span></div>
+    <div class="msg" style="max-width:560px;margin-top:8px">${nudge}</div><div class="counter">${nudge.length} / 1,000</div>
+  </div></div>`; };
+const stepHook = (n, url='https://hooks.oqtastore.example/leads') => `<div class="step"><div class="t"><span><span class="n">${n}</span><b>Send to a webhook</b></span><span class="act">⋮</span></div><div class="row"><span class="seg"><span class="on">POST</span><span>GET</span><span>PUT</span></span><span class="input" style="max-width:420px">${url}</span></div><div class="meta">Sends the contact, the captured email and the automation name as JSON. <a style="color:var(--nav-on)">Add a header</a></div></div>`;
+const fallbackRow = (choice='Reply to the comment instead') => `<div class="meta" style="margin-top:12px"><span style="display:inline-block;width:220px">If this person can't receive messages</span> <span class="select" style="display:inline-flex;width:300px">${choice} <span>▾</span></span></div>`;
+const addStep = (open=false, items=[]) => `<div style="position:relative"><div class="addstep">+ Add step</div>${open?`<div class="menu">${items.map(i=>`<div class="${i[2]?'hov':''}"><b>${i[0]}</b><small>${i[1]}</small></div>`).join('')}</div><div style="height:${items.length*58+30}px"></div>`:''}</div>`;
+const con = () => `<div class="connector"></div>`;
+
+function trigger({p, kinds=['comments'], which='any', keywords=['pricing','price','how much'], msgKinds=false, allowComments=true, allowDM=true, postLabel='any post or reel', anyText=false}) {
+  const kw = anyText ? `<div class="kw"><span class="kwph">Any comment</span></div>` : `<div class="kw">${keywords.map(k=>`<span>${k}</span>`).join('')}<span class="kwph">Type a word and press Enter</span></div>`;
+  return `<div class="card"><h3>When someone…</h3>
+    <div class="row" style="gap:18px;margin-bottom:14px;flex-wrap:wrap">
+      ${allowComments?`<span class="chk"><i class="${kinds.includes('comments')?'on':''}">${kinds.includes('comments')?'✓':''}</i>comments</span>`:''}
+      ${allowDM?`<span class="chk"><i class="${kinds.includes('dm')?'on':''}">${kinds.includes('dm')?'✓':''}</i>sends a message</span>`:''}
+    </div>
+    ${allowComments&&kinds.includes('comments')?`<div class="field"><label>On</label><span class="seg"><span class="${which==='any'?'on':''}">Any post</span><span class="${which==='specific'?'on':''}">A specific post</span><span class="${which==='next'?'on':''}">My next post</span></span>${which==='specific'?`<div class="select" style="margin-top:10px">🖼 "New autumn collection is live…" · reel · Oct 3 <span>Change</span></div>`:''}</div>`:''}
+    <div class="field"><label>${kinds.includes('comments')&&kinds.includes('dm')?'And the comment or message contains':kinds.includes('dm')?'And the message contains':'And the comment contains'}</label>${kw}<div class="hint" style="margin-top:6px">Matches whole words, any letter case. Leave empty to match everything.</div></div>
+  </div>`;
+}
+const wikiBtn = (p, state='Draft') => `<div class="subrow"><span class="wikilink wikibtn book" data-p="${p.k}">${p.name} automations wiki</span><span class="wikilink">${state==='Draft'?'Not published yet':'Version 4 is active · all versions'}</span></div>`;
+const editorHead = (name, p, state='Draft', actions) => `${crumbs(name)}<div class="ph"><div><div class="row"><h1 style="font-size:26px">${name}</h1>${state==='Live'?'<span class="pill ok">Live</span>':state==='Paused'?'<span class="pill warn">Paused</span>':'<span class="pill">Draft</span>'}</div><div class="sub">${plat(p)}</div></div><div class="row">${actions ?? (state==='Live'?'<span class="btn ghost">Move to draft</span><span class="btn sec">Save</span><span class="btn">Save and publish</span>':'<span class="btn sec">Save draft</span><span class="btn">Publish</span>')}</div></div>${tabs('Editor')}${wikiBtn(p, state)}`;
+
+/* full Instagram flow (the brief) */
+const IG_STEPS = (opts={}) => `<div class="card"><h3>Then…</h3><div class="steps">
+  ${stepReply(1)}${con()}
+  ${stepDM(2,'Send a message','Hey! Reply with your email and I’ll send you the pricing sheet.')}${con()}
+  ${stepWait(3,'an email address','72',undefined,{reminder:false, platformName:'Instagram'})}${con()}
+  ${stepDM(4,'Send a message','Thanks! Here it is 👇',['Open pricing sheet'],'<div class="meta">Button opens https://oqtastore.example/pricing?e={{email}}</div>')}${con()}
+  ${stepHook(5)}
+  ${opts.noAdd?'':con()+addStep(opts.menuOpen, opts.menuItems||[])}
+</div></div>`;
+
+/* ---------- cards ---------- */
+const cards = [];
+const add = (id, group, title, html, label='') => cards.push({id, group, title, html, label:(group+' · '+title+' '+label).toLowerCase()});
+
+/* OVERVIEW */
+add('overview','DM automations','Empty state', frame({body: header('DM automations','0 automations · 0 runs in the last 24 hours · 0 failed','<span class="btn">+ New automation</span>') + `<div class="empty"><h3>No automations yet</h3><p>Create your first automation to start responding automatically.</p><span class="btn">+ New automation</span></div>`}), 'first run');
+add('overview-list','DM automations','Overview with automations', frame({body: header('DM automations','6 automations · 197 runs in the last 24 hours · 1 failed','<span class="btn sec">All accounts ▾</span><span class="btn">+ New automation</span>') + listTable(LIST_ROWS)}), 'list live draft paused');
+add('overview-filter','DM automations','Overview filtered by account', frame({body: header('DM automations','1 automation on @oqtastore · 38 runs in the last 24 hours · 1 failed','<span class="btn sec">'+plat(P.ig)+' ▾</span><span class="btn">+ New automation</span>') + listTable(LIST_ROWS.slice(0,1))}), 'filter instagram');
+add('overview-failing','DM automations','Overview with a disconnected account', frame({body: header('DM automations','6 automations · 197 runs in the last 24 hours · 9 failed','<span class="btn sec">All accounts ▾</span><span class="btn">+ New automation</span>') + `<div class="callout warn" style="margin-bottom:16px"><b>Oqtastore (Facebook Page) is disconnected</b>Runs for "Free guide on GUIDE" have failed since 09:12. <a style="color:#c2410c;text-decoration:underline">Reconnect the account</a> to resume.</div>` + listTable(LIST_ROWS.map((r,i)=> i===1 ? [r[0], r[1], r[2], '<span class="pill bad">Account disconnected</span>', '9','0','<span style="color:#b91c1c">9</span>','09:12'] : r))}), 'error disconnected reconnect');
+add('overview-search','DM automations','Overview, search with no match', frame({body: header('DM automations','6 automations','<span class="btn sec">All accounts ▾</span><span class="btn">+ New automation</span>') + `<div class="field"><span class="input" style="max-width:360px">webinar</span></div><div class="empty"><h3>Nothing matches "webinar"</h3><p>Check the spelling or clear the search.</p><span class="btn sec">Clear search</span></div>`}), 'search empty');
+add('overview-loading','DM automations','Overview loading', frame({body: header('DM automations','&nbsp;','<span class="btn">+ New automation</span>') + `<div class="tbl" style="padding:16px">${[1,2,3,4].map(()=>'<div class="skel" style="width:'+(60+Math.random()*30)+'%"></div>').join('')}</div>`}), 'skeleton');
+
+/* NEW AUTOMATION MODAL */
+const modalNew = (inner, foot) => `<div class="modal-bg"><div class="modal"><h3>New automation</h3><p>Name it and choose the account it runs on. The account can’t be changed later.</p>${inner}<div class="foot">${foot}</div></div></div>`;
+const bodyList = header('DM automations','6 automations · 197 runs in the last 24 hours · 1 failed','<span class="btn sec">All accounts ▾</span><span class="btn">+ New automation</span>') + listTable(LIST_ROWS);
+add('new','New automation','Choose account', frame({body: bodyList, overlay: modalNew(`<div class="field"><label>Account</label><div class="select open">Select a connected account <span>▾</span></div><div class="opts">
+  <div class="hov">${plat(P.ig)}<small>Instagram</small></div>
+  <div>${plat(P.fb)}<small>Facebook Page</small></div>
+  <div>${plat(P.th)}<small>Threads</small></div>
+  <div>${plat(P.x)}<small>X</small></div>
+  <div>${plat(P.bs)}<small>Bluesky</small></div>
+  <div>${plat(P.yt)}<small>YouTube</small></div>
+  <div>${plat(P.li)}<small>LinkedIn Page</small></div>
+  <div>${plat(P.wa)}<small>WhatsApp Business</small></div>
+  <div>${plat(P.tt)}<small>TikTok Business</small></div>
+  <div class="dis">${plat(P.pi)}<small>No comment or message automations on Pinterest</small></div>
+</div></div><div class="field"><label>Name</label><span class="input">Pricing lead capture</span></div>`, '<span class="btn sec">Cancel</span><span class="btn">Create</span>')}), 'modal account picker all platforms');
+add('new-noaccounts','New automation','No supported accounts connected', frame({body: bodyList, overlay: modalNew(`<div class="callout info"><b>Connect an account first</b>Automations run on Instagram, Facebook Pages, Threads, X, Bluesky, YouTube, LinkedIn Pages, WhatsApp Business and TikTok Business accounts. None is connected yet.</div>`, '<span class="btn sec">Cancel</span><span class="btn">Go to Accounts</span>')}), 'modal empty');
+add('new-disconnected','New automation','Chosen account is disconnected', frame({body: bodyList, overlay: modalNew(`<div class="field"><label>Account</label><div class="select">${plat(P.fb)} <span>▾</span></div><div class="errtext">This account is disconnected. Reconnect it on the Accounts page before creating an automation.</div></div><div class="field"><label>Name</label><span class="input">Free guide on GUIDE</span></div>`, '<span class="btn sec">Cancel</span><span class="btn dis">Create</span>')}), 'modal error');
+
+/* EDITOR (Instagram, canonical) */
+add('editor','Editor','Instagram · new draft (empty)', frame({body: editorHead('Pricing lead capture', P.ig, 'Draft') + trigger({p:P.ig, keywords:[], which:'any'}) + `<div class="card"><h3>Then…</h3><div class="steps">${stepReply(1,'')}${con()}${addStep(false)}</div></div>`}), 'instagram empty');
+add('editor-full','Editor','Instagram · the brief’s flow, draft', frame({body: editorHead('Pricing lead capture', P.ig, 'Draft') + trigger({p:P.ig}) + IG_STEPS()}), 'instagram comment reply dm email link webhook');
+add('editor-addstep','Editor','Instagram · Add step menu open', frame({body: editorHead('Pricing lead capture', P.ig, 'Draft') + trigger({p:P.ig}) + IG_STEPS({menuOpen:true, menuItems:[['Send a message','Direct message with text and up to 3 buttons',true],['Ask them to follow','Holds the next message until they follow you'],['Wait for a reply','Continue when they answer, optionally capture an email'],['Send to a webhook','Post what was collected to your CRM']]})}), 'instagram menu options');
+add('editor-specific','Editor','Instagram · specific post, comments and messages', frame({body: editorHead('Pricing lead capture', P.ig, 'Draft') + trigger({p:P.ig, kinds:['comments','dm'], which:'specific'}) + IG_STEPS({noAdd:true})}), 'instagram post picker both triggers');
+add('editor-live','Editor','Instagram · live, editing', frame({body: editorHead('Pricing lead capture', P.ig, 'Live') + `<div class="callout info" style="margin-bottom:16px"><b>This automation is live</b>Changes apply to new runs after you save and publish. Runs already in progress finish with the version they started on.</div>` + trigger({p:P.ig}) + IG_STEPS({noAdd:true})}), 'instagram live version');
+
+/* EDITOR PER PLATFORM */
+add('platforms','Editor per platform','Facebook Page', frame({body: editorHead('Free guide on GUIDE', P.fb, 'Live') + trigger({p:P.fb, keywords:['guide']}) + `<div class="card"><h3>Then…</h3><div class="steps">${stepReply(1,'Check your inbox 📬')}${con()}${stepDM(2,'Send a message','Here’s the free guide you asked for.',['Download the guide'])}${con()}${addStep(false)}</div></div>`}), 'facebook messenger');
+add('plat-threads','Editor per platform','Threads (replies only)', frame({body: editorHead('Launch day replies', P.th, 'Paused') + trigger({p:P.th, keywords:['launch'], allowDM:false}) + `<div class="card"><h3>Then…</h3><div class="steps">${stepReply(1,'Thanks! Full details are in the pinned post 📌')}${con()}${addStep(true,[['Reply to the comment','Public reply in the thread',true],['Send to a webhook','Post the comment and author to your CRM']])}</div></div>`, note:'Threads has no messaging API, so the constructor offers replies and webhooks only. Nothing is marked as "not allowed"; it simply is not offered.'}), 'threads reply only');
+add('plat-x','Editor per platform','X (DM may be refused)', frame({body: editorHead('Pricing on X', P.x, 'Draft') + trigger({p:P.x, keywords:['pricing']}) + `<div class="card"><h3>Then…</h3><div class="steps">${stepReply(1,'DM sent 📩')}${con()}${stepDM(2,'Send a message','Hey! Here’s the pricing sheet: https://oqtastore.example/pricing',[],fallbackRow('Reply to the comment instead'))}${con()}${addStep(false)}</div></div>`, note:'On X and Bluesky a person can block messages from accounts they don’t follow. The message step therefore carries one setting: what to do when the person can’t receive it. Options: reply to the comment instead, skip the step, or stop the run.'}), 'x twitter fallback');
+add('plat-bluesky','Editor per platform','Bluesky', frame({body: editorHead('Bluesky pricing', P.bs, 'Draft') + trigger({p:P.bs, keywords:['pricing']}) + `<div class="card"><h3>Then…</h3><div class="steps">${stepReply(1,'Sent you a DM!')}${con()}${stepDM(2,'Send a message','Reply with your email and I’ll send the pricing sheet.',[],fallbackRow('Skip this step'))}${con()}${stepWait(3,'an email address','72',undefined,{reminderHours:'6', reminderText:'Still want the pricing sheet? Reply with your email and I’ll send it over.'})}${con()}${stepDM(4,'Send a message','Thanks! https://oqtastore.example/pricing?e={{email}}',[],fallbackRow('Stop the run'))}${con()}${addStep(false)}</div></div>`}), 'bluesky fallback');
+add('plat-youtube','Editor per platform','YouTube (replies only)', frame({body: editorHead('Thank every commenter', P.yt, 'Live') + trigger({p:P.yt, keywords:[], anyText:true, allowDM:false, postLabel:'any video'}) + `<div class="card"><h3>Then…</h3><div class="steps">${stepReply(1,'Thanks for watching! New video every Tuesday 🎬')}${con()}${addStep(false)}</div></div>`, note:'YouTube replies arrive a few minutes after the comment because YouTube offers no push notification for comments.'}), 'youtube reply only polling');
+add('plat-linkedin','Editor per platform','LinkedIn Page (replies only)', frame({body: editorHead('Whitepaper replies', P.li, 'Draft') + trigger({p:P.li, keywords:['whitepaper'], allowDM:false}) + `<div class="card"><h3>Then…</h3><div class="steps">${stepReply(1,'Thanks! The whitepaper is at oqtastore.example/whitepaper')}${con()}${stepHook(2,'https://hooks.oqtastore.example/linkedin-leads')}${con()}${addStep(false)}</div></div>`}), 'linkedin page');
+add('plat-whatsapp','Editor per platform','WhatsApp Business (messages only)', frame({body: editorHead('Catalog on request', P.wa, 'Live') + trigger({p:P.wa, kinds:['dm'], keywords:['catalog','catalogue'], allowComments:false}) + `<div class="card"><h3>Then…</h3><div class="steps">${stepDM(1,'Send a message','Here’s our autumn catalog 👇',['Open catalog'])}${con()}${stepWait(2,'a reply','24','Sorry, I didn’t catch that. Which item would you like me to reserve?',{reminderHours:'2', reminderText:'Still there? Tell me the item name and I’ll reserve it for you.'})}${con()}${stepDM(3,'Send a message','Want me to reserve something? Reply with the item name.')}${con()}${addStep(false)}</div></div>`, note:'WhatsApp has no posts or comments, so the trigger card shows only "sends a message".'}), 'whatsapp message trigger');
+add('plat-tiktok','Editor per platform','TikTok Business (messages only)', frame({body: editorHead('TikTok inbox replies', P.tt, 'Draft') + trigger({p:P.tt, kinds:['dm'], keywords:['price'], allowComments:false}) + `<div class="card"><h3>Then…</h3><div class="steps">${stepDM(1,'Send a message','Prices start at $29. Want the full list?',['See all prices'])}${con()}${addStep(false)}</div></div>`}), 'tiktok business messaging');
+add('plat-pinterest','Editor per platform','Pinterest (not available)', frame({body: header('DM automations','6 automations','<span class="btn">+ New automation</span>') + `<div class="callout info"><b>Pinterest doesn’t support comment or message automations</b>Pinterest’s API exposes pins and boards but no comments and no messages. Connect Pinterest for publishing and analytics; automations are available on the other nine networks.</div>`}), 'pinterest unsupported');
+
+/* EDITOR STATES */
+add('states','Editor states','Validation: empty message', frame({body: editorHead('Pricing lead capture', P.ig, 'Draft') + trigger({p:P.ig}) + `<div class="card"><h3>Then…</h3><div class="steps">${stepReply(1)}${con()}<div class="step" style="border-color:#dc2626"><div class="t"><span><span class="n">2</span><b>Send a message</b></span><span class="act">⋮</span></div><div class="input ta err" style="max-width:560px"></div><div class="errtext">Write the message to send.</div></div>${con()}${addStep(false)}</div></div>`}), 'error required');
+add('state-toolong','Editor states','Validation: message too long', frame({body: editorHead('Pricing lead capture', P.ig, 'Draft') + trigger({p:P.ig}) + `<div class="card"><h3>Then…</h3><div class="steps">${stepReply(1)}${con()}<div class="step" style="border-color:#dc2626"><div class="t"><span><span class="n">2</span><b>Send a message</b></span><span class="act">⋮</span></div><div class="input ta err" style="max-width:560px">Hey! Thanks so much for your interest in our autumn collection. We’ve put together a complete pricing sheet with every item, sizes, colours, bundle discounts, shipping options for the EU, UK and US, and our return policy. Reply with your email and I’ll send it over right away, plus a 10% code… (continues)</div><div class="counter" style="color:#b91c1c">1,042 / 1,000 characters</div></div>${con()}${addStep(false)}</div></div>`}), 'error limit');
+add('state-nokeyword','Editor states','Validation: keyword needed when a specific post is not chosen', frame({body: editorHead('Pricing lead capture', P.ig, 'Draft') + `<div class="card"><h3>When someone…</h3><div class="row" style="gap:18px;margin-bottom:14px"><span class="chk"><i class="on">✓</i>comments</span><span class="chk"><i></i>sends a message</span></div><div class="field"><label>On</label><span class="seg"><span class="on">Any post</span><span>A specific post</span><span>My next post</span></span></div><div class="field"><label>And the comment contains</label><div class="kw" style="border-color:#dc2626"><span class="kwph">Type a word and press Enter</span></div><div class="errtext">Add at least one keyword, or choose a specific post to reply to every comment on it.</div></div></div>` + IG_STEPS({noAdd:true})}), 'error keyword');
+add('state-unsaved','Editor states','Unsaved changes on leave', frame({body: editorHead('Pricing lead capture', P.ig, 'Live') + trigger({p:P.ig}) + IG_STEPS({noAdd:true}), overlay: `<div class="modal-bg"><div class="modal"><h3>Leave without saving?</h3><p>Your changes to "Pricing lead capture" will be lost.</p><div class="foot"><span class="btn sec">Keep editing</span><span class="btn danger">Leave</span></div></div></div>`}), 'confirm');
+add('state-publish','Editor states','Publish confirmation', frame({body: editorHead('Pricing lead capture', P.ig, 'Draft') + trigger({p:P.ig}) + IG_STEPS({noAdd:true}), overlay: `<div class="modal-bg"><div class="modal"><h3>Publish "Pricing lead capture"?</h3><p>It will start answering comments on any post of ${P.ig.acct} that contain <b>pricing</b>, <b>price</b> or <b>how much</b>.</p><div class="callout info">Test it from another account: your own comments never trigger an automation.</div><div class="foot"><span class="btn sec">Cancel</span><span class="btn">Publish</span></div></div></div>`}), 'modal');
+add('state-published','Editor states','Published', frame({body: editorHead('Pricing lead capture', P.ig, 'Live') + trigger({p:P.ig}) + IG_STEPS({noAdd:true}), overlay: `<div class="toast ok">✓ Published as version 4.</div>`}), 'toast success');
+add('state-draft','Editor states','Move to draft confirmation', frame({body: editorHead('Pricing lead capture', P.ig, 'Live') + trigger({p:P.ig}) + IG_STEPS({noAdd:true}), overlay: `<div class="modal-bg"><div class="modal"><h3>Move to draft?</h3><p>It stops answering new comments and messages. 5 runs already waiting for a reply will finish.</p><div class="foot"><span class="btn sec">Cancel</span><span class="btn">Move to draft</span></div></div></div>`}), 'pause');
+add('state-trigger-off','Editor states','One trigger paused on a live automation', frame({body: editorHead('Pricing lead capture', P.ig, 'Live') + `<div class="card"><h3>When someone…</h3><div class="row" style="gap:28px;margin-bottom:14px"><span class="row"><span class="tog on"></span> comments</span><span class="row"><span class="tog"></span> sends a message <span class="pill" style="font-size:12px">paused</span></span></div><div class="field"><label>On</label><span class="seg"><span class="on">Any post</span><span>A specific post</span><span>My next post</span></span></div><div class="field"><label>And the comment contains</label><div class="kw"><span>pricing</span><span>price</span><span>how much</span></div></div></div>` + IG_STEPS({noAdd:true}), note:'On a live automation each trigger has its own switch. Turning one off applies immediately, without republishing.'}), 'toggle');
+add('state-versions-old','Editor states','Version history (superseded by the Versions group)', frame({body: editorHead('Pricing lead capture', P.ig, 'Live') + trigger({p:P.ig}) + IG_STEPS({noAdd:true}), overlay: `<div class="drawer"><span class="close">✕</span><h3>Version history</h3><div class="hint">Runs keep the version they started on.</div><div class="verlist" style="margin-top:14px"><div><span><b>v3</b> · current <small>· 2 runs in progress</small></span><small>Oct 4, 10:00</small></div><div><span><b>v2</b> <small>· added the webhook step · 3 runs in progress</small></span><small>Sep 30, 14:22</small></div><div><span><b>v1</b> <small>· first published</small></span><small>Sep 12, 09:05</small></div></div><div style="margin-top:16px"><span class="btn sec sm">Restore v2 as a draft</span></div></div>`}), 'drawer');
+add('state-archive','Editor states','Archive confirmation', frame({body: editorHead('Launch day replies', P.th, 'Paused') + trigger({p:P.th, keywords:['launch'], allowDM:false}), overlay: `<div class="modal-bg"><div class="modal"><h3>Archive "Launch day replies"?</h3><p>It disappears from the list and stops for good. Its runs and analytics stay readable.</p><div class="foot"><span class="btn sec">Cancel</span><span class="btn danger">Archive</span></div></div></div>`}), 'delete');
+add('state-duplicate','Editor states','Duplicate to another account', frame({body: editorHead('Pricing lead capture', P.ig, 'Live') + trigger({p:P.ig}) + IG_STEPS({noAdd:true}), overlay: `<div class="modal-bg"><div class="modal"><h3>Duplicate to another account</h3><p>Steps the other network doesn’t support are left out of the copy.</p><div class="field"><label>Account</label><div class="select">${plat(P.yt)} <span>▾</span></div></div><div class="callout info">YouTube copy will keep step 1 (reply to the comment) and step 5 (webhook). Messaging steps are left out.</div><div class="foot"><span class="btn sec">Cancel</span><span class="btn">Create draft</span></div></div></div>`}), 'copy');
+add('state-saving','Editor states','Saving', frame({body: editorHead('Pricing lead capture', P.ig, 'Draft', '<span class="btn sec dis">Saving…</span><span class="btn dis">Publish</span>') + trigger({p:P.ig}) + IG_STEPS({noAdd:true})}), 'loading');
+add('state-savefail','Editor states','Save failed', frame({body: editorHead('Pricing lead capture', P.ig, 'Draft') + trigger({p:P.ig}) + IG_STEPS({noAdd:true}), overlay: `<div class="toast bad">Couldn’t save. Check your connection and try again.</div>`}), 'error');
+
+
+/* VERSION FILTER (HD-035) */
+const VCOUNT = {4:38, 3:294, 2:61, 1:19};
+const versionFilter = (sel=[], open=false) => { const all = sel.length===0 || sel.length===4; const label = all ? 'All versions' : 'Versions: ' + sel.map(v=>'v'+v).join(', ');
+  const box = on => `<i style="width:16px;height:16px;border:1.5px solid #9ca3af;border-radius:4px;display:inline-grid;place-items:center;font-size:11px;${on?'background:#7c3aed;border-color:#7c3aed;color:#fff':''}">${on?'✓':''}</i>`;
+  return `<span class="vsel"><span class="trig ${all?'':'on'}">${label} <span>▾</span></span>${open?`<div class="dd">${[4,3,2,1].map(v=>`<div>${box(all||sel.includes(v))}v${v}${v===4?' · active':''}<small>${VCOUNT[v]} runs</small></div>`).join('')}<div class="foot"><span>Select all</span><span>Clear</span></div></div>`:''}</span>`; };
+const runFiltersV = (on='All', sel=[], open=false) => `<div class="row" style="margin-bottom:14px;gap:6px">${['All','Running','Waiting','Completed','Failed','Expired','Superseded'].map(f=>`<span class="pill ${f===on?'info':''}" style="font-weight:500">${f}</span>`).join('')}<span style="margin-left:6px">${versionFilter(sel, open)}</span><span style="flex:1"></span><span class="input" style="max-width:220px;padding:7px 10px;font-size:13px;color:#9ca3af">Search by person</span></div>`;
+const anHead = (filter, range) => `${crumbs('Pricing lead capture')}<div class="ph"><div><div class="row"><h1 style="font-size:26px">Pricing lead capture</h1><span class="pill ok">Live</span></div><div class="sub">${plat(P.ig)}</div></div><div class="row">${filter}<span class="btn sec">${range} ▾</span></div></div>${tabs('Analytics')}`;
+
+/* RUNS */
+const runRows = [
+  ['@jane.doe','Oct 4, 10:00','<span class="pill ok">Completed</span>','5 of 5','v3'],
+  ['@maria.k','Oct 4, 09:58','<span class="pill wait">Waiting for a reply</span>','3 of 5 · gives up Oct 7','v3'],
+  ['@spammy_sam','Oct 4, 09:42','<span class="pill">Superseded</span>','2 of 5 · commented again','v3'],
+  ['@bob','Oct 4, 09:41','<span class="pill bad">Failed</span>','2 of 5 · messaging window closed','v2'],
+  ['@desktop_dan','Oct 1, 08:00','<span class="pill">Expired</span>','3 of 5 · no reply in 72 h','v2'],
+  ['@alex.r','Oct 4, 10:01','<span class="pill info">Running</span>','1 of 5','v3'],
+];
+const runsTable = (rows) => `<div class="tbl"><table><thead><tr><th>Person</th><th>Started</th><th>Status</th><th>Progress</th><th>Version</th><th></th></tr></thead><tbody>${rows.map(r=>`<tr><td><b>${r[0]}</b></td><td class="mono">${r[1]}</td><td>${r[2]}</td><td>${r[3]}</td><td class="mono">${r[4]}</td><td style="color:#9ca3af">›</td></tr>`).join('')}</tbody></table></div>`;
+const runsHead = () => `${crumbs('Pricing lead capture')}<div class="ph"><div><div class="row"><h1 style="font-size:26px">Pricing lead capture</h1><span class="pill ok">Live</span></div><div class="sub">${plat(P.ig)}</div></div><div class="row"><span class="btn ghost">Move to draft</span><span class="btn sec">Edit</span></div></div>${tabs('Runs')}`;
+const runFilters = (on='All') => `<div class="row" style="margin-bottom:14px;gap:6px">${['All','Running','Waiting','Completed','Failed','Expired','Superseded'].map(f=>`<span class="pill ${f===on?'info':''}" style="font-weight:500">${f}</span>`).join('')}<span style="margin-left:6px">${versionFilter([])}</span><span style="flex:1"></span><span class="input" style="max-width:220px;padding:7px 10px;font-size:13px;color:#9ca3af">Search by person</span></div>`;
+add('runs','Runs','Runs list, all statuses', frame({body: runsHead() + runFilters() + runsTable(runRows)}), 'completed waiting failed expired superseded running');
+add('runs-empty','Runs','Runs empty (just published)', frame({body: runsHead() + runFilters() + `<div class="empty"><h3>No runs yet</h3><p>Runs appear here the moment someone comments "pricing", "price" or "how much" on a post of ${P.ig.acct}.</p><span class="btn sec">How to test it</span></div>`}), 'empty');
+add('runs-failed','Runs','Runs filtered: failed', frame({body: runsHead() + runFilters('Failed') + runsTable(runRows.filter(r=>r[2].includes('Failed')))}), 'filter');
+const drawerRun = (title, status, kv, timeline, foot='') => `<div class="drawer"><span class="close">✕</span><h3>${title}</h3><div class="row" style="margin-top:6px">${status}</div><div class="kv">${kv}</div><ul class="tl">${timeline}</ul>${foot}</div>`;
+add('run-completed','Runs','Run detail: completed', frame({body: runsHead() + runFilters() + runsTable(runRows), overlay: drawerRun('@jane.doe','<span class="pill ok">Completed</span><span class="hint">v3 · 1 min 2 s</span>','<span>Started by</span><span>Comment "pricing please!" on "New autumn collection…"</span><span>Email captured</span><span>jane@example.com</span><span>Conversation</span><span><a style="color:var(--nav-on)">Open in Inbox</a></span>', `<li class="ok"><time>10:00:02</time>Replied to the comment</li><li class="ok"><time>10:00:03</time>Sent the message asking for an email</li><li class="ok"><time>10:00:58</time>Reply received with an email</li><li class="ok"><time>10:00:59</time>Sent the pricing link</li><li class="ok"><time>10:01:04</time>Webhook delivered (200)</li>`)}), 'detail success');
+add('run-waiting','Runs','Run detail: waiting for a reply', frame({body: runsHead() + runFilters() + runsTable(runRows), overlay: drawerRun('@maria.k','<span class="pill wait">Waiting for a reply</span><span class="hint">v3 · gives up Oct 7, 09:58</span>','<span>Started by</span><span>Comment "price?" on "New autumn collection…"</span><span>Waiting for</span><span>a reply with an email address</span>', `<li class="ok"><time>09:58:10</time>Replied to the comment</li><li class="ok"><time>09:58:11</time>Sent the message asking for an email</li><li class="wait"><time>now</time>Waiting for a reply · 71 h 50 min left</li><li class="mute"><time></time>Send the pricing link</li><li class="mute"><time></time>Webhook</li>`, '<div style="margin-top:16px" class="row"><span class="btn sec sm">Open conversation</span><span class="btn ghost sm">Stop this run</span></div>')}), 'detail pending');
+add('run-failed','Runs','Run detail: failed', frame({body: runsHead() + runFilters() + runsTable(runRows), overlay: drawerRun('@bob','<span class="pill bad">Failed</span><span class="hint">v2</span>','<span>Started by</span><span>Comment "pricing?" on "Behind the scenes…"</span><span>Failed at</span><span>Step 4 · Send the pricing link</span>', `<li class="ok"><time>09:41:00</time>Replied to the comment</li><li class="ok"><time>09:41:01</time>Sent the message asking for an email</li><li class="ok"><time>Oct 3, 11:20</time>Reply received with an email</li><li class="bad"><time>09:41:30</time>Couldn’t send: the 24-hour messaging window closed before this step ran</li>`, `<div class="callout warn" style="margin-top:14px"><b>What to do</b>Instagram only lets you message someone within 24 hours of their last message. If @bob writes again, a new run can continue. Nothing is retried automatically.</div>`)}), 'detail error window');
+add('run-expired','Runs','Run detail: expired', frame({body: runsHead() + runFilters() + runsTable(runRows), overlay: drawerRun('@desktop_dan','<span class="pill">Expired</span><span class="hint">v2</span>','<span>Started by</span><span>Comment "how much" on "Behind the scenes…"</span><span>Ended</span><span>No reply within 72 hours</span>', `<li class="ok"><time>Oct 1, 08:00</time>Replied to the comment</li><li class="ok"><time>Oct 1, 08:00</time>Sent the message asking for an email</li><li class="mute"><time>Oct 4, 08:00</time>Gave up waiting · nothing else was sent</li>`)}), 'detail timeout');
+add('run-superseded','Runs','Run detail: superseded', frame({body: runsHead() + runFilters() + runsTable(runRows), overlay: drawerRun('@spammy_sam','<span class="pill">Superseded</span><span class="hint">v3</span>','<span>Started by</span><span>Comment "what’s the price" on "New autumn collection…"</span><span>Replaced by</span><span><a style="color:var(--nav-on)">the run started at 09:42</a> when @spammy_sam commented again</span>', `<li class="ok"><time>09:41:10</time>Replied to the comment</li><li class="ok"><time>09:41:11</time>Sent the message asking for an email</li><li class="mute"><time>09:42:00</time>Stopped: a newer run took over this conversation</li>`)}), 'detail replaced');
+add('run-running','Runs','Run detail: running', frame({body: runsHead() + runFilters() + runsTable(runRows), overlay: drawerRun('@alex.r','<span class="pill info">Running</span><span class="hint">v3</span>','<span>Started by</span><span>Comment "pricing" on "New autumn collection…"</span>', `<li class="ok"><time>10:01:00</time>Replied to the comment</li><li class="wait"><time>10:01:01</time>Sending the message asking for an email…</li><li class="mute"><time></time>Wait for a reply</li><li class="mute"><time></time>Send the pricing link</li><li class="mute"><time></time>Webhook</li>`)}), 'detail in progress');
+add('run-fallback','Runs','Run detail: message refused, fallback used (Bluesky)', frame({body: `${crumbs('Bluesky pricing')}<div class="ph"><div><div class="row"><h1 style="font-size:26px">Bluesky pricing</h1><span class="pill ok">Live</span></div><div class="sub">${plat(P.bs)}</div></div><div class="row"><span class="btn ghost">Move to draft</span><span class="btn sec">Edit</span></div></div>${tabs('Runs')}` + runFilters() + runsTable([['@nora.bsky.social','Oct 4, 11:12','<span class="pill ok">Completed</span>','replied instead of messaging','v1']]), overlay: drawerRun('@nora.bsky.social','<span class="pill ok">Completed</span><span class="hint">v1</span>','<span>Started by</span><span>Reply "pricing" to "Autumn drop is live"</span>', `<li class="ok"><time>11:12:03</time>Replied to the comment</li><li class="ok"><time>11:12:04</time>@nora doesn’t accept messages from accounts she doesn’t follow · replied to the comment instead, as set in step 2</li>`)}), 'bluesky fallback detail');
+
+/* ANALYTICS */
+add('analytics','Analytics','Automation analytics', frame({body: `${crumbs('Pricing lead capture')}<div class="ph"><div><div class="row"><h1 style="font-size:26px">Pricing lead capture</h1><span class="pill ok">Live</span></div><div class="sub">${plat(P.ig)}</div></div><div class="row"><span class="btn sec">Last 7 days ▾</span></div></div>${tabs('Analytics')}<div class="stats" style="grid-template-columns:repeat(5,1fr)"><div class="stat"><b>412</b><span>Started</span></div><div class="stat"><b>72%</b><span>Reply rate · 297 replied to the first message</span></div><div class="stat"><b>371</b><span>Completed · 90%</span></div><div class="stat"><b>298</b><span>Emails captured · 72%</span></div><div class="stat"><b>9</b><span>Failed · 3 in the last 7 days</span></div></div><div class="chart">${[30,45,60,55,80,95,70,88,100,76,64,90,85,60].map(h=>`<i style="height:${h}%"></i>`).join('')}</div><div class="hint" style="margin-top:8px">Runs per day. Reply rate is the share of started runs where the person answered the first message. Expired and superseded runs count as started, not as completed or failed.</div>`}), 'stats chart');
+add('analytics-empty','Analytics','Analytics, nothing yet', frame({body: `${crumbs('Bluesky pricing')}<div class="ph"><div><div class="row"><h1 style="font-size:26px">Bluesky pricing</h1><span class="pill">Draft</span></div><div class="sub">${plat(P.bs)}</div></div></div>${tabs('Analytics')}<div class="empty"><h3>No data yet</h3><p>Publish the automation to start collecting numbers.</p></div>`}), 'empty');
+
+/* ACCOUNTS (host page, unchanged shape) */
+add('accounts','Accounts','Accounts list', frame({active:'Accounts', body: header('Accounts','4 connected accounts','<span class="btn">Connect account</span>') + `<div class="tbl"><table><thead><tr><th>Account</th><th>Account ID</th><th>Page ID</th><th>Connected</th><th>Status</th><th></th></tr></thead><tbody>
+  <tr><td>${plat(P.ig,'@oqtastore')}</td><td class="mono">61240 ⧉</td><td class="mono">—</td><td>Oct 3, 2026</td><td><span class="pill ok">Healthy</span></td><td style="color:#9ca3af">⋯</td></tr>
+  <tr><td>${plat(P.fb,'Oqtastore')}<span class="sub">Page connected</span></td><td class="mono">61241 ⧉</td><td class="mono">1049…</td><td>Oct 3, 2026</td><td><span class="pill bad">Reconnect needed</span></td><td style="color:#9ca3af">⋯</td></tr>
+  <tr><td>${plat(P.yt,'Oqtastore')}</td><td class="mono">52175 ⧉</td><td class="mono">—</td><td>Oct 3, 2026</td><td><span class="pill ok">Healthy</span></td><td style="color:#9ca3af">⋯</td></tr>
+  <tr><td>${plat(P.bs,'@oqtastore.bsky.social')}</td><td class="mono">61242 ⧉</td><td class="mono">—</td><td>Oct 4, 2026</td><td><span class="pill ok">Healthy</span></td><td style="color:#9ca3af">⋯</td></tr>
+</table></div><div class="callout warn" style="margin-top:16px"><b>Important</b>Make sure your social accounts are warmed up (active for several weeks with a real posting history) before connecting.</div>`}), 'host page healthy reconnect');
+add('accounts-reconnect','Accounts','Reconnect modal', frame({active:'Accounts', body: header('Accounts','4 connected accounts','<span class="btn">Connect account</span>'), overlay: `<div class="modal-bg"><div class="modal"><h3>Reconnect Oqtastore (Facebook Page)</h3><p>The page’s permission expired on Oct 4 at 09:12. 1 live automation is paused until you reconnect.</p><div class="callout info">You’ll be asked to confirm the same permissions as before: read comments, read and send messages.</div><div class="foot"><span class="btn sec">Cancel</span><span class="btn">Reconnect with Facebook</span></div></div></div>`}), 'modal expired');
+
+/* SYSTEM STATES */
+add('system','System states','Plan doesn’t include automations', frame({body: header('DM automations','Available on every paid plan','') + `<div class="empty"><h3>Start your plan to use automations</h3><p>Automations reply to comments and messages for you. They are included in every paid plan.</p><span class="btn">See plans</span></div>`}), 'billing trial upgrade');
+add('system-gateway','System states','Platform connection unavailable', frame({body: header('DM automations','6 automations · 197 runs in the last 24 hours · 1 failed','<span class="btn sec">All accounts ▾</span><span class="btn">+ New automation</span>') + `<div class="callout bad" style="margin-bottom:16px"><b>We can’t reach the social networks right now</b>New comments and messages are queued and will be processed when the connection is back. Nothing is lost. Started 10:14, we’re on it.</div>` + listTable(LIST_ROWS)}), 'outage banner queued');
+add('system-ratelimit','System states','Rate limit notice on a run', frame({body: runsHead() + runFilters() + runsTable(runRows), overlay: drawerRun('@alex.r','<span class="pill info">Running</span><span class="hint">v3</span>','<span>Started by</span><span>Comment "pricing" on "New autumn collection…"</span>', `<li class="ok"><time>10:01:00</time>Replied to the comment</li><li class="wait"><time>10:01:01</time>Instagram asked us to slow down · retrying in 40 s</li><li class="mute"><time></time>Wait for a reply</li>`)}), 'backoff 429');
+add('system-diag','System states','Diagnostics pill (test environment only, dismissable)', frame({body: header('DM automations','6 automations · 197 runs in the last 24 hours · 1 failed','<span class="btn sec">All accounts ▾</span><span class="btn">+ New automation</span>') + listTable(LIST_ROWS), overlay: `<div class="diag"><em>diag</em> gateway: <b>test stand</b> <em>·</em> clock: 2026-10-04 10:00Z <em>·</em> sha 144d790 <span class="x">✕</span></div>`, note:'Visible only when the service runs in test mode. It floats over the page, uses none of the product’s styles, and the page is complete without it.'}), 'test mode overlay');
+add('system-mobile','System states','Narrow viewport (sidebar collapsed)', `<div class="app" style="grid-template-columns:1fr;max-width:420px;margin:0 auto;border-left:1px solid var(--line);border-right:1px solid var(--line)"><div class="main" style="padding:18px"><div class="row" style="justify-content:space-between;margin-bottom:12px"><span>☰</span><b>DM automations</b><span class="btn sm">+ New</span></div>${listTable(LIST_ROWS.slice(0,3)).replace('<table>','<table style="font-size:13px">')}</div></div>`, 'responsive');
+
+/* Platform automations wiki, part 1: Instagram, Facebook Pages, Threads, X, Bluesky.
+   Each article: { t: title, h: html }. Facts as of October 2026; items marked (verify) should be re-checked against the platform's current documentation before publishing. */
+const WIKI = {};
+
+WIKI.ig = [
+{t:'What you can automate on Instagram', h:`<p>Instagram is the richest network for comment-triggered automation. Through Meta’s official API an automation can:</p><ul><li>Watch comments on your posts and reels and match keywords.</li><li>Reply publicly to the comment.</li><li>Send one private reply to the commenter, which opens a direct-message conversation.</li><li>Continue the conversation while the person keeps replying.</li><li>Capture an email address from a reply and hand it to a webhook.</li></ul><p>It cannot message someone who never interacted with you, and it cannot keep messaging someone who stopped replying. Everything below follows from those two facts.</p>`},
+{t:'Is automation allowed? Meta’s terms', h:`<p>Yes, when it runs through the official Instagram API on a Business or Creator account and only answers people who acted first: a comment, a story reply, a mention or a message. That is exactly what this feature does.</p><p>What Meta prohibits and enforces: cold direct messages to people who never interacted with you, tools that log in with your password or drive the app like a human (auto-follow, auto-like, comment bots), and promotional messages outside the 24-hour window. Using any of those alongside this feature puts the account at risk even if this feature itself is compliant.</p><p>Rule of thumb: if the person did something first and you answer through the API, you are inside the terms.</p>`},
+{t:'The two windows: 7 days and 24 hours', h:`<p>Instagram runs two separate clocks and the automation respects both.</p><ul><li><b>Private reply window: 7 days from the comment.</b> A comment can receive exactly one private reply, and only within seven days of when the comment was written, not when it was noticed. A second private reply to the same comment is refused.</li><li><b>Conversation window: 24 hours from the person’s last message.</b> Once the person writes back, you may send free-form messages, including promotional ones, for 24 hours after their latest message. Each new message from them restarts the clock. When the window closes, the automation can send nothing until they write again.</li></ul><p>The private reply does <i>not</i> open the 24-hour window. Only the person’s own message does. That is why the first message should ask for a reply.</p>`},
+{t:'Limits and rate limits', h:`<p>Numbers from Meta’s documentation and observed practice:</p><ul><li>Message text: 1,000 bytes. Emoji and accented letters take several bytes each.</li><li>Buttons: up to 3 link buttons per message. They render in the mobile app only; on instagram.com the message shows without buttons, so use either a button or a plain URL in the text, never both.</li><li>Quick replies: up to 13, labels up to 20 characters.</li><li>Private replies: 750 per hour per account.</li><li>Messages: 100 per second for text, 10 per second for media (Meta’s technical cap).</li><li>Conversation reads: 2 calls per second.</li><li>General API budget: 200 calls per user per hour.</li></ul><p>The widely quoted “200 DMs per hour” is a pacing convention tools use to stay far from spam thresholds, not a Meta cap. The automation paces sends and backs off on rate-limit errors automatically.</p>`},
+{t:'How to avoid being flagged', h:`<p>Being within the API limits is necessary, not sufficient. Meta also watches how people react.</p><ul><li><b>Reports and blocks</b> are the strongest signal. If people did not expect a message, they report it. Only message people who asked by commenting the keyword you told them to comment.</li><li><b>Identical text to many people</b> looks like spam. Write 2 or 3 variants of the public reply and rotate them. Address the person when you can.</li><li><b>Link-heavy messages</b> get filtered more often. One link per message, after a sentence of context.</li><li><b>Sudden volume</b> on a quiet account stands out. Warm the account up with real activity before a big campaign.</li><li><b>Mixing in unofficial tools</b> (password-based bots, follow/unfollow) poisons the whole account.</li></ul><p>If reach drops after a campaign, pause the automation for a few days and check Account Status in the Instagram app.</p>`},
+{t:'What to automate and what to keep manual', h:`<p>Automate the first touch and the delivery; keep judgment for people.</p><ul><li><b>Automate:</b> the public acknowledgement, the private reply with the resource or the question, email capture, hand-off to your CRM.</li><li><b>Keep manual:</b> pricing negotiations, complaints, anything personal, and every reply that is not an email when you asked for one.</li><li><b>Set expectations</b> in the message: “I’ll personally reply within a day” turns a silence into a promise you can keep.</li></ul><p>Review failed and waiting runs daily. A run waiting for an email is often a person asking a real question; answer it yourself from the Inbox.</p>`},
+{t:'Reply timing: instant or delayed?', h:`<p>For comment-to-DM, instant is what people expect and it is safe. The person just typed the keyword; a private reply within seconds feels like a feature, not spam. Delays do not make an API message look more human to Meta, because the message is already marked as sent by an app.</p><p>Where timing matters:</p><ul><li>Public replies: fine instantly, but rotate wording so twenty “Sent you a DM!” replies in a minute do not read as a bot.</li><li>Follow-up messages inside the conversation: answer immediately after their reply; a slow answer wastes the 24-hour window.</li><li>Big launches: expect bursts; the automation queues and paces sends, nothing is dropped.</li></ul>`},
+{t:'Writing messages that work', h:`<p>Short, specific, and ending in an action.</p><ul><li>First message: one sentence of context, one request. “Reply with your email and I’ll send the pricing sheet.” The request matters because their reply opens the 24-hour window.</li><li>Second message: deliver what you promised, then one next step.</li><li>Use the person’s name only if it is their real name; usernames look odd in a sentence.</li><li>Keep under 500 characters; long messages get skimmed.</li><li>One link, placed after the context. On desktop a plain URL is clickable; a button is not shown.</li><li>No pressure tactics and no claims you cannot back; both drive reports.</li></ul>`},
+{t:'Keywords and triggers', h:`<p>Keywords match whole words, in any letter case, anywhere in the comment. “price” matches “what is the price?” and not “pricey”.</p><ul><li>Prefer one distinctive word you can print in the caption: PRICING, GUIDE, LINK.</li><li>Add the obvious variants people actually type: price, pricing, how much.</li><li>Avoid words that appear in unrelated comments (“love”, “info”) unless the automation is meant for every comment.</li><li>“Any post” is right for evergreen offers; “a specific post” keeps a launch separate.</li><li>Your own comments never trigger a run. Comments on posts where you are only a collaborator do not either; use the account that owns the post.</li></ul>`},
+{t:'Account setup and permissions', h:`<p>The account must be a Business or Creator account connected through Meta’s login with these permissions: read comments, manage comments, read and send messages. If the account was connected before messaging features existed, reconnect it so the new permissions are granted.</p><p>If another app also manages the inbox (another automation tool, a help desk), Meta routes conversations to one app at a time. Make this automation the primary receiver or hand it conversations explicitly, otherwise replies never arrive and runs expire.</p>`},
+{t:'Testing an automation', h:`<p>Test from a second account. The automation ignores comments and messages from the connected account itself, so testing from your own account proves nothing.</p><ol><li>Publish the automation.</li><li>From another account, comment the keyword on a matching post.</li><li>Check that the public reply appears and the private message arrives.</li><li>Reply from the test account and confirm the next step.</li><li>Open the run in the Runs tab and read the timeline.</li></ol><p>Delete test comments afterwards if you keep the post public.</p>`},
+{t:'Common failures and what they mean', h:`<ul><li><b>Private reply refused: window closed.</b> The comment is older than 7 days. Nothing to do; the person can comment again.</li><li><b>Private reply refused: already sent.</b> Another automation or a human already answered this comment privately. Keep one live automation per keyword per account.</li><li><b>Message refused: messaging window closed.</b> More than 24 hours since their last message. The run ends; a new message from them starts a fresh one.</li><li><b>Account disconnected.</b> Token expired or permissions were removed. Reconnect on the Accounts page; runs resume for new events.</li><li><b>Rate limited.</b> The automation waited and retried; no action needed unless it repeats daily, which means volume is above what the account can carry.</li></ul>`},
+{t:'Email capture, consent and data', h:`<p>Asking for an email in a conversation is a consent-bearing act: say what you will send and how often. A single line is enough: “I’ll send the pricing sheet and nothing else unless you ask.”</p><ul><li>Store only what you need: the address, the time, the automation that collected it.</li><li>Send it to your CRM through the webhook step and keep the CRM as the system of record.</li><li>Honour unsubscribe and deletion requests from the CRM side; the automation does not keep a mailing list.</li><li>EU and UK audiences: the GDPR lawful basis is usually consent or legitimate interest for the single promised message; marketing sequences need explicit consent.</li></ul>`},
+{t:'Metrics that matter', h:`<p>Three numbers tell you whether an automation earns its keep:</p><ul><li><b>Completion rate</b>: completed divided by started. Below 60% usually means the first message does not get replies; rewrite it to end with a question.</li><li><b>Email capture rate</b> for lead flows. 30 to 50% is typical for a strong offer.</li><li><b>Failures in the last 7 days</b> and their reasons. Window-closed failures mean your follow-up came too late; account failures mean reconnect.</li></ul><p>Expired and superseded runs are not failures; they are people who did not reply or who commented again.</p>`},
+];
+
+WIKI.fb = [
+{t:'What you can automate on Facebook Pages', h:`<p>Facebook Pages work like Instagram with Messenger as the conversation surface. An automation can watch comments on the Page’s posts, reply publicly, send one private reply to the commenter that opens a Messenger conversation, continue while they reply, capture an email and call a webhook. Personal profiles are not supported; only Pages have the comments and messaging APIs.</p>`},
+{t:'Is automation allowed? Messenger Platform policy', h:`<p>Yes, through the official Messenger Platform, for people who contacted the Page first. Meta’s policy allows automated responses to comments and messages and allows promotional content inside the 24-hour standard messaging window. It prohibits unsolicited messages, messages outside the window that are not covered by a message tag, and misuse of tags for promotion. Human-agent and other tags exist for support cases and are not available to this automation.</p>`},
+{t:'The two windows: 7 days and 24 hours', h:`<ul><li><b>Private reply to a comment:</b> once per comment, within 7 days of the comment.</li><li><b>Standard messaging window:</b> 24 hours after the person’s last message. Inside it you may send free-form and promotional messages; outside it, nothing from this automation.</li></ul><p>As on Instagram, the private reply itself does not open the 24-hour window; the person’s message does. End the first message with a question.</p>`},
+{t:'Limits and rate limits', h:`<ul><li>Message text: 2,000 characters.</li><li>Buttons: up to 3 per message; templates and quick replies are available on Messenger and render on desktop as well as mobile.</li><li>Send API: 300 calls per second per Page for text and links, 10 per second for audio and video.</li><li>Daily budget: 200 calls multiplied by the number of people who engaged with the Page in the last 24 hours. A Page with few engaged users has a small budget; the automation paces to it.</li><li>Private replies: one per comment.</li></ul>`},
+{t:'How to avoid being flagged', h:`<p>Messenger has a block and report rate that Meta tracks per Page. Keep it near zero:</p><ul><li>Message only people who commented the keyword you asked for.</li><li>Vary public replies; rotate 2 or 3 versions.</li><li>One link per message, with context before it.</li><li>Never use message tags to send promotions outside the window; that is the fastest way to lose messaging access.</li><li>Keep Page roles clean; a removed admin can silently break the connection.</li></ul>`},
+{t:'What to automate and what to keep manual', h:`<p>Same split as Instagram: automate acknowledgement, delivery and capture; keep conversations that need judgment. On Facebook, comment threads are public and long-lived, so a wrong public reply stays visible; keep the public reply neutral and move specifics to Messenger.</p>`},
+{t:'Reply timing', h:`<p>Instant is expected. Facebook audiences skew to desktop more than Instagram, so links in message text matter; buttons render there too, so you may use both.</p>`},
+{t:'Writing messages that work', h:`<ul><li>Lead with what they asked for.</li><li>Ask one question so the 24-hour window opens.</li><li>Buttons work well on Messenger; use a button for the main action.</li><li>Stay under 600 characters even though 2,000 are allowed.</li></ul>`},
+{t:'Keywords and triggers', h:`<p>Whole-word, case-insensitive matching on comments under the Page’s posts. Replies to comments count as comments. Comments by the Page itself never trigger a run. Posts must belong to the Page; comments on shared posts from other Pages are not visible.</p>`},
+{t:'Page setup and permissions', h:`<p>Connect the Page through Facebook Login with permissions to manage engagement and messaging. The connecting user needs the Page’s messaging and content roles. If the Page uses Meta’s inbox handover with another app, make this automation the primary receiver or conversations never reach it.</p>`},
+{t:'Testing', h:`<p>Use a personal profile that is not an admin of the Page. Comment the keyword, confirm the public reply, confirm the Messenger message, reply, confirm the next step, and read the run timeline.</p>`},
+{t:'Common failures', h:`<ul><li><b>Window closed</b> on the private reply: comment older than 7 days.</li><li><b>Already replied</b>: another tool or person sent the private reply.</li><li><b>Messaging window closed</b>: more than 24 hours since their last message.</li><li><b>Page disconnected</b> or a Page role removed: reconnect.</li><li><b>Budget exceeded</b>: the 200 × engaged-users daily budget ran out; wait or grow engagement.</li></ul>`},
+{t:'Email capture and data', h:`<p>Identical to Instagram: state what you will send, capture once, hand off to the CRM through the webhook, keep nothing else. Messenger users can see the business’s name and category in the thread, so make sure the Page profile matches the promise in the message.</p>`},
+];
+
+WIKI.th = [
+{t:'What you can automate on Threads', h:`<p>Threads offers public replies only. An automation can watch replies to your posts, match keywords and reply publicly in the thread. There is no messaging API, so no private replies, no direct messages and no email capture inside Threads. The webhook step still works for handing the commenter’s handle to your CRM.</p>`},
+{t:'Is automation allowed?', h:`<p>Yes, through the Threads API, for publishing and replying from your own account. The API carries reply controls set by the post’s author; you can only reply where replies are allowed. Meta’s Threads terms prohibit spam, deceptive engagement and mass identical replies. Replying to people who replied to you is the supported use.</p>`},
+{t:'Limits and rate limits', h:`<ul><li>1,000 replies per 24 hours per profile, counted separately from the 250 posts per 24 hours.</li><li>Reply text up to 500 characters.</li><li>Replies can carry one link; links are clickable.</li><li>Reply events arrive by webhook when subscribed; otherwise the automation polls the replies endpoint every few minutes (verify current field names).</li></ul>`},
+{t:'How to avoid being flagged', h:`<p>Identical replies posted quickly are the main risk on Threads, where everything is public. Rotate several reply variants, keep replies on-topic, and never reply to replies on other people’s posts automatically. Links in every reply draw reports; put the link in the post or a pinned reply instead and point people to it.</p>`},
+{t:'What to automate and what to keep manual', h:`<p>Automate acknowledgement and pointers: “The link is in the pinned reply”. Keep everything conversational manual; a public thread with an obviously automated voice reads badly and stays visible.</p>`},
+{t:'Reply timing', h:`<p>Instant replies are fine for pointers. For anything that reads like a conversation, a short delay of a few minutes is friendlier, and the automation can be set to wait before replying (verify availability in this version).</p>`},
+{t:'Writing replies that work', h:`<p>Short, specific, human. Under 200 characters. Name the thing they asked about. If a link is needed, say where it is rather than pasting it in every reply.</p>`},
+{t:'Keywords and triggers', h:`<p>Whole-word, case-insensitive matching on replies to your posts. Your own replies never trigger a run. Quoted posts are not replies and do not trigger.</p>`},
+{t:'Account setup', h:`<p>Connect the Threads account through Meta’s login with publish and manage-replies permissions. Reply controls on each post limit who can reply; the automation only sees replies that the post allows.</p>`},
+{t:'Testing', h:`<p>Reply to your own post from another account with the keyword and confirm the public reply appears within the expected delay. Read the run in the Runs tab.</p>`},
+{t:'Common failures', h:`<ul><li><b>Reply quota reached</b>: 1,000 replies in 24 hours; the automation waits for the window to roll.</li><li><b>Replies disabled</b> on the post: nothing to do.</li><li><b>Account disconnected</b>: reconnect.</li></ul>`},
+];
+
+WIKI.x = [
+{t:'What you can automate on X', h:`<p>On X the “comment” is a reply to your post. An automation can watch replies to your posts, match keywords, reply publicly and send a direct message to the person, provided they accept messages from you. It can wait for their reply and continue. There is no comment-bound private reply; the message is an ordinary DM, so it can be refused by the recipient’s settings.</p>`},
+{t:'Is automation allowed? X’s automation rules', h:`<p>Partly, and the rules tightened in 2026. X’s automation rules allow automated replies to people who engaged with you and prohibit bulk, unsolicited or duplicate replies and messages. Since February 2026 programmatic replies are restricted to conversations where the app’s user is involved; replying to replies on your own posts is the supported case, while keyword-driven replies to other people’s conversations are not (verify the current wording). AI-generated reply bots need X’s written approval. Automated DMs are allowed only to people who engaged first and only within platform limits.</p><p>Label the account as automated in settings if replies are machine-generated; X requires it.</p>`},
+{t:'Limits and rate limits', h:`<ul><li>Direct messages: 500 per day per account, whatever the tool.</li><li>DM API: 15 requests per 15 minutes per user context on Pro-level access; Basic-level access has been unreliable for sending (verify your tier).</li><li>Reply text: 280 characters (longer for Premium).</li><li>DM text: 10,000 characters; no buttons; links are clickable.</li><li>Reply events: webhook via the Account Activity API on enterprise access, otherwise polling the mentions timeline every minute or two.</li><li>API access is pay-per-use in 2026; reads and writes have a cost.</li></ul>`},
+{t:'Who can receive your message', h:`<p>A person receives a DM from an account they do not follow only if their settings allow messages from everyone. Otherwise the send fails with a permissions error. The automation therefore asks what to do when the person cannot receive messages: reply to the comment instead, skip the step, or stop the run. Choose “reply instead” for lead magnets; the public reply can carry the link.</p>`},
+{t:'How to avoid being flagged', h:`<ul><li>Rotate reply wording; identical replies are X’s definition of spam.</li><li>Never DM people who did not reply to you.</li><li>Keep daily DMs well under 500 and spread them out.</li><li>Do not combine with follow/unfollow tools.</li><li>Mark the account as automated if the replies are generated.</li></ul>`},
+{t:'What to automate and what to keep manual', h:`<p>Automate pointers and resource delivery. Keep replies that take a position manual; on X a bad automated reply becomes a screenshot. Prefer the public reply with a link over a DM when the audience is broad.</p>`},
+{t:'Reply timing', h:`<p>Public replies can be instant. DMs are better a minute or two after the reply so the person has seen your public answer first. A small delay also smooths bursts under the DM rate limit.</p>`},
+{t:'Writing messages that work', h:`<p>Public reply under 200 characters with the keyword echoed. DM: one line of context, the link, one question. Avoid link shorteners; X expands and flags some.</p>`},
+{t:'Keywords and triggers', h:`<p>Whole-word, case-insensitive matching on replies to your posts. Quote posts and mentions elsewhere are not replies and do not trigger. Your own replies never trigger.</p>`},
+{t:'Account setup and access', h:`<p>Connect the account with user-context authorization including DM read and write scopes. Confirm the API access level supports DMs; without it the message step is unavailable and the constructor will not offer it.</p>`},
+{t:'Testing', h:`<p>Use a second account that follows you (so DMs are allowed) and one that does not (to see the fallback). Reply with the keyword and check both paths in the Runs tab.</p>`},
+{t:'Common failures', h:`<ul><li><b>Recipient does not accept messages</b>: the chosen fallback applied.</li><li><b>Daily DM cap</b>: the automation pauses DMs until the next day; public replies continue.</li><li><b>Rate limited</b>: retried with backoff.</li><li><b>Duplicate content</b> rejected by X: vary the text.</li></ul>`},
+];
+
+WIKI.bs = [
+{t:'What you can automate on Bluesky', h:`<p>Bluesky supports public replies and direct messages. An automation can watch replies to your posts, match keywords, reply publicly, send a DM if the person allows it, wait for their reply and continue. Direct messages are a separate chat service; most people only accept messages from accounts they follow.</p>`},
+{t:'Is automation allowed? Community guidelines', h:`<p>Bluesky openly supports bots and automation through its public API and asks automated accounts to label themselves. Its community guidelines prohibit spam: mass identical content, unsolicited replies, following everyone. Replying to people who replied to you is fine. Unsolicited DMs are the fastest route to blocks and a bad reputation on the network, so DM only when the person asked by replying with the keyword.</p>`},
+{t:'Limits and rate limits', h:`<ul><li>Write operations are scored in points: a create costs 3, an update 2, a delete 1. The cap is 5,000 points per hour and 35,000 per day per account, so at most about 1,666 posts, replies or likes per hour.</li><li>Post and reply text: 300 graphemes.</li><li>DM text: up to 10,000 characters; no buttons; links are clickable through facets.</li><li>Reply events: the firehose or a notifications poll; the automation uses notifications every minute or so.</li></ul>`},
+{t:'Who can receive your message', h:`<p>Each person chooses who can message them: everyone, people they follow, or nobody. If the setting blocks you, the send fails. The automation asks what to do then: reply to the comment instead, skip, or stop. “Reply instead” is the safe default.</p>`},
+{t:'How to avoid being flagged', h:`<ul><li>Label the account as a bot if the replies are automated; it is expected on Bluesky.</li><li>Vary reply text.</li><li>DM only people who replied with the keyword.</li><li>Stay far below the points cap; a hundred replies an hour is already a lot for a human-looking account.</li><li>Respect moderation lists; being added to a spam list cuts reach instantly.</li></ul>`},
+{t:'What to automate and what to keep manual', h:`<p>Automate resource delivery and acknowledgements. Keep conversations manual; Bluesky’s culture rewards real replies and punishes canned ones visibly.</p>`},
+{t:'Reply timing', h:`<p>Instant public replies are acceptable. For DMs, a short delay after the public reply reads better. Volume is rarely an issue at Bluesky’s scale; wording is.</p>`},
+{t:'Writing messages that work', h:`<p>Replies under 200 graphemes. DMs with one link and a question. Mention the post they replied to so the DM has context.</p>`},
+{t:'Keywords and triggers', h:`<p>Whole-word, case-insensitive matching on replies to your posts. Your own replies never trigger. Quote posts do not trigger.</p>`},
+{t:'Account setup', h:`<p>Connect with an app password or OAuth; the chat service needs its own permission. No app review is required.</p>`},
+{t:'Testing', h:`<p>Use a second account set to accept DMs from everyone and another set to followers only. Reply with the keyword and check both paths.</p>`},
+{t:'Common failures', h:`<ul><li><b>Recipient blocks messages</b>: fallback applied.</li><li><b>Rate limited (points)</b>: wait for the hourly window.</li><li><b>Session expired</b>: reconnect.</li></ul>`},
+];
+
+/* Platform automations wiki, part 2: YouTube, LinkedIn Pages, WhatsApp Business, TikTok Business, Pinterest. */
+
+WIKI.yt = [
+{t:'What you can automate on YouTube', h:`<p>YouTube offers public comment replies only. An automation can watch comments on your videos, match keywords and reply as the channel. There are no direct messages on YouTube, so no private follow-up and no email capture inside YouTube. The webhook step can still hand the commenter’s channel name to your CRM.</p>`},
+{t:'Is automation allowed? YouTube API policies', h:`<p>Yes, for your own channel through the YouTube Data API. YouTube’s developer policies forbid automating comments on other people’s videos and forbid anything its spam policy covers: repetitive, deceptive or traffic-driving comments. Replying to viewers on your own videos with relevant, varied text is the supported use. Three community-guideline strikes in 90 days terminate a channel, so treat the spam policy as a hard line.</p>`},
+{t:'Limits and quota', h:`<ul><li>The API has a daily quota of 10,000 units by default.</li><li>Reading a page of comments costs 1 unit; posting a reply costs 50 units.</li><li>At default quota that is roughly 150 replies a day with polling every few minutes on a few videos. More needs a quota increase from Google.</li><li>There is no push notification for comments; the automation polls, so replies arrive minutes after the comment.</li><li>Reply text up to 10,000 characters; links are allowed but YouTube may hold link-bearing comments for review.</li></ul>`},
+{t:'How to avoid being flagged', h:`<ul><li>Vary reply text; identical replies are the spam policy’s definition.</li><li>Avoid links in automated replies, or pin one comment with the link and point to it.</li><li>Reply only on your own channel.</li><li>Keep the reply relevant to the keyword; a generic thank-you on every comment reads as engagement bait.</li></ul>`},
+{t:'What to automate and what to keep manual', h:`<p>Automate pointers (“the template is linked in the description”) and keyword-specific answers. Keep everything else manual; YouTube comment sections are where viewers judge whether a creator is present.</p>`},
+{t:'Reply timing', h:`<p>Replies arrive a few minutes after the comment because of polling, which reads naturally. Do not expect instant replies and do not promise them in the caption.</p>`},
+{t:'Writing replies that work', h:`<p>Under 300 characters, specific to the keyword, no link unless unavoidable. Address the viewer’s question first.</p>`},
+{t:'Keywords and triggers', h:`<p>Whole-word, case-insensitive matching on top-level comments and replies on your videos. The channel’s own comments never trigger. Comments held for review are not visible to the API until approved.</p>`},
+{t:'Channel setup', h:`<p>Connect the channel through Google with the YouTube force-SSL scope. Google requires app verification for that scope; the connection prompts for it. One channel per connection.</p>`},
+{t:'Testing', h:`<p>Comment from another Google account on one of your videos and wait for the polling interval. Check the run timeline for the poll time and the reply time.</p>`},
+{t:'Common failures', h:`<ul><li><b>Quota exhausted</b>: replies resume when the daily quota resets (midnight Pacific time).</li><li><b>Comment held for review</b>: the reply posts after you approve the comment.</li><li><b>Comments disabled</b> on the video: nothing to do.</li><li><b>Connection expired</b>: reconnect.</li></ul>`},
+];
+
+WIKI.li = [
+{t:'What you can automate on LinkedIn', h:`<p>LinkedIn supports public comment replies on organization Pages only. An automation can watch comments on the Page’s posts, match keywords and reply as the Page. Personal profiles have no comment events through the API. There is no messaging for this purpose: LinkedIn’s messaging API is partner-only, limited to first-degree connections and bans automated sending.</p>`},
+{t:'Is automation allowed? LinkedIn’s terms', h:`<p>Through LinkedIn’s official APIs, yes, for Pages. LinkedIn’s User Agreement (section 8.2) prohibits bots, scrapers and browser tools that act as a human; those are the automations that get accounts restricted. API-based replies from a Page are in scope. Webhooks for comments require an approved use case in LinkedIn’s developer portal.</p>`},
+{t:'Limits and rate limits', h:`<ul><li>Daily limits per application and per member, reset at midnight UTC. Standard limits are not published; the developer portal shows them per endpoint. Development-tier apps get 500 calls per app and 100 per member per day.</li><li>Comment text up to 1,250 characters.</li><li>Comment events arrive by webhook when approved, otherwise by polling the comments endpoint, which consumes the daily budget.</li></ul>`},
+{t:'How to avoid being flagged', h:`<p>LinkedIn is a professional network and tolerates canned text poorly. Rotate wording, keep replies short and relevant, never include tracking links in every reply, and never run personal-profile automation alongside Page automation.</p>`},
+{t:'What to automate and what to keep manual', h:`<p>Automate acknowledgement and pointers to a resource. Keep every reply with substance manual. On LinkedIn a Page’s reply is read as the company speaking.</p>`},
+{t:'Reply timing', h:`<p>A few minutes to an hour is the natural rhythm; instant replies from a company Page look odd. The automation can be set to wait before replying (verify availability in this version).</p>`},
+{t:'Writing replies that work', h:`<p>Formal, short, specific. Thank the person, answer the keyword, point to the resource in the post or the Page’s site.</p>`},
+{t:'Keywords and triggers', h:`<p>Whole-word, case-insensitive matching on comments under the organization’s posts. Page admin comments never trigger.</p>`},
+{t:'Page setup and access', h:`<p>The connecting user must be a Page admin. The application needs Community Management API access, which LinkedIn grants by review. Without webhook approval the automation polls within the daily budget.</p>`},
+{t:'Testing', h:`<p>Comment from a personal profile that is not a Page admin. Expect the reply after the polling interval.</p>`},
+{t:'Common failures', h:`<ul><li><b>Daily limit reached</b>: replies resume after midnight UTC.</li><li><b>Access revoked or token expired</b>: reconnect as a Page admin.</li><li><b>Comment deleted before reply</b>: run ends without a reply.</li></ul>`},
+];
+
+WIKI.wa = [
+{t:'What you can automate on WhatsApp', h:`<p>WhatsApp has no posts or comments. The trigger is a message from a person. An automation can match keywords in inbound messages, reply with text and buttons, wait for a reply and continue, capture an email and call a webhook. It cannot start a conversation: only people who message the business first are reachable with free-form messages.</p>`},
+{t:'Is automation allowed? WhatsApp Business policies', h:`<p>Yes, through the WhatsApp Business Platform. Business-initiated messages require the person’s opt-in and must use approved message templates; replies inside the customer service window may be free-form. Spam, misleading content and unsolicited marketing are grounds for lowering the account’s quality rating and, repeatedly, for losing messaging limits.</p>`},
+{t:'The 24-hour customer service window', h:`<p>A person’s message opens a 24-hour window during which the business may send free-form messages. Each new message from them restarts it. Outside the window only approved templates can be sent, and this automation does not send templates. End your messages with a question so the window stays open while the flow runs.</p>`},
+{t:'Limits, tiers and quality rating', h:`<ul><li>Message text: 4,096 characters; interactive messages carry up to 3 reply buttons or a list of up to 10 options.</li><li>Business-initiated conversations are capped per 24 hours by tier: 250 unique people for unverified accounts, then 1,000, 10,000, 100,000 and unlimited as volume and quality grow. Replies within the window do not count against the tier.</li><li>Quality rating (green, yellow, red) reflects blocks and reports; red blocks tier upgrades and can reduce limits.</li><li>Pricing: per-message charges apply to marketing and, from October 2026, to some service replies (verify current pricing).</li></ul>`},
+{t:'How to avoid being flagged', h:`<ul><li>Reply to what they asked; keyword matches should lead to relevant answers.</li><li>No marketing in service replies unless the person asked for it.</li><li>Make it easy to stop: “Reply STOP to end” in longer flows.</li><li>Watch the quality rating weekly in Meta Business Manager.</li></ul>`},
+{t:'What to automate and what to keep manual', h:`<p>Automate first-line answers, catalog links and lead capture. Hand anything beyond two exchanges to a person; WhatsApp users expect a human quickly and blocks are expensive here.</p>`},
+{t:'Reply timing', h:`<p>Instant replies are the norm on WhatsApp. Delays hurt. Make sure the flow answers within seconds and that a human follows up on waiting runs within the window.</p>`},
+{t:'Writing messages that work', h:`<p>Short, with buttons for the main choices. One link. Name the business in the first message if the number is new to them.</p>`},
+{t:'Keywords and triggers', h:`<p>Whole-word, case-insensitive matching on inbound text messages. Media without text, reactions and stickers do not trigger. Messages the business sends never trigger.</p>`},
+{t:'Account setup', h:`<p>A WhatsApp Business Account with a verified phone number connected through the Business Platform. Business verification raises the tier and is required for most real volumes.</p>`},
+{t:'Testing', h:`<p>Message the business number from a personal phone with the keyword and follow the flow. Check the run timeline and the webhook delivery.</p>`},
+{t:'Common failures', h:`<ul><li><b>Window closed</b>: more than 24 hours since their last message; a new message from them starts a new run.</li><li><b>Tier limit reached</b>: applies to business-initiated messages; replies continue.</li><li><b>Quality rating red</b>: review content and volume before continuing.</li><li><b>Number disconnected</b>: reconnect.</li></ul>`},
+];
+
+WIKI.tt = [
+{t:'What you can automate on TikTok', h:`<p>Through the TikTok Business Messaging API, an automation can answer direct messages that people send to a Business Account: match keywords, reply with text, wait and continue. Comments on organic videos do not reach the API, so there is no comment trigger on TikTok. The constructor therefore offers the message trigger only.</p>`},
+{t:'Is automation allowed? TikTok’s rules', h:`<p>Yes, for Business Accounts through TikTok’s approved messaging partners. The business cannot start conversations; it may only reply. Accounts in the EEA, Switzerland and the UK cannot use the messaging API at all. TikTok’s community guidelines prohibit spam and deceptive engagement; keep replies relevant and non-promotional unless asked.</p>`},
+{t:'The 48-hour window and the 10-message cap', h:`<p>A person’s message opens a 48-hour window. Inside it the business may send up to 10 consecutive messages; each new message from the person resets both the window and the counter. Messages sent outside the window are not delivered. Flows should ask a question early so the counter resets.</p>`},
+{t:'Limits', h:`<ul><li>10 consecutive business messages per window.</li><li>Text messages; images in supported markets; no buttons in the API (verify).</li><li>Partner-level access; rate limits are set per partner and are not public.</li></ul>`},
+{t:'How to avoid being flagged', h:`<p>Reply to what was asked, keep the counter in mind, and never try to reach people who did not write first. TikTok’s own welcome message and suggested questions are the sanctioned way to open a conversation; use them to steer people to your keywords.</p>`},
+{t:'What to automate and what to keep manual', h:`<p>Automate the first answer and resource delivery; keep the rest manual. With a 10-message cap a long automated flow wastes the window.</p>`},
+{t:'Reply timing', h:`<p>Instant. The window is generous, the message cap is not; spend messages on substance.</p>`},
+{t:'Keywords and triggers', h:`<p>Whole-word, case-insensitive matching on inbound text messages to the Business Account. Comments on videos are not events.</p>`},
+{t:'Account setup', h:`<p>A TikTok Business Account outside the EEA, Switzerland and the UK, connected through a TikTok messaging partner. Organic comments remain a manual job in the TikTok app.</p>`},
+{t:'Testing', h:`<p>Message the Business Account from a personal TikTok account with the keyword and follow the flow. Count the messages against the cap.</p>`},
+{t:'Common failures', h:`<ul><li><b>Window closed</b> or <b>message cap reached</b>: wait for the person to write again.</li><li><b>Region not supported</b>: the account cannot use messaging.</li><li><b>Partner access revoked</b>: reconnect.</li></ul>`},
+];
+
+WIKI.pi = [
+{t:'Why there are no automations on Pinterest', h:`<p>Pinterest’s API covers pins, boards, ads and analytics. It exposes no comments and no messages, so there is nothing an automation can listen to or answer. Comments on pins can only be read and answered in the Pinterest app by a person.</p>`},
+{t:'What to do instead', h:`<ul><li>Put the call to action and the link on the pin itself; Pinterest traffic is link-driven.</li><li>Use the pin description to send people to a network where the automation runs: “Comment PRICING on our Instagram post”.</li><li>Check pin comments manually; volumes are usually small.</li></ul>`},
+{t:'If Pinterest adds comment or message APIs', h:`<p>The capability model this feature is built on lets a new platform be added as a declared record. If Pinterest publishes comment events or messaging, it can be supported without changing the constructor.</p>`},
+];
+
+WIKI.names = {ig:'Instagram', fb:'Facebook Page', th:'Threads', x:'X', bs:'Bluesky', yt:'YouTube', li:'LinkedIn Page', wa:'WhatsApp Business', tt:'TikTok Business', pi:'Pinterest'};
+
+
+/* WIKI */
+const wikiModal = (pk, idx=0) => { const arts = WIKI[pk]; const a = arts[idx]; const name = WIKI.names[pk];
+  return `<div class="modal-bg wiki-bg"><div class="wiki" data-p="${pk}"><div class="wnav"><div class="wtitle">${name} automations wiki</div><div class="wsub">${arts.length} articles</div>${arts.map((x,i)=>`<div class="${i===idx?'on':''}" data-i="${i}">${x.t}</div>`).join('')}</div><div class="wart"><span class="wclose">✕</span><h2>${a.t}</h2>${a.h}<div class="wfoot">Updated October 2026. Facts marked (verify) should be checked against the platform’s current documentation before relying on them.</div></div></div></div>`; };
+const wikiBody = (pk) => { const p = P[pk]; const names = {ig:'Pricing lead capture',fb:'Free guide on GUIDE',th:'Launch day replies',x:'Pricing on X',bs:'Bluesky pricing',yt:'Thank every commenter',li:'Whitepaper replies',wa:'Catalog on request',tt:'TikTok inbox replies',pi:'—'};
+  if (pk==='pi') return header('DM automations','6 automations','<span class="btn">+ New automation</span>') + listTable(LIST_ROWS);
+  return editorHead(names[pk], p, 'Draft') + trigger({p, keywords:['pricing'], allowDM: !['th','yt','li'].includes(pk), allowComments: !['wa','tt'].includes(pk), kinds: ['wa','tt'].includes(pk)?['dm']:['comments']}) + `<div class="card"><h3>Then…</h3><div class="steps">${stepReply(1,'Sent you a DM!')}${con()}${addStep(false)}</div></div>`; };
+for (const pk of ['ig','fb','th','x','bs','yt','li','wa','tt','pi']) {
+  add('wiki-'+pk, 'Wiki', `${WIKI.names[pk]} automations wiki (${WIKI[pk].length} articles, click the left list)`, frame({body: wikiBody(pk), overlay: wikiModal(pk, 0)}), 'wiki ' + WIKI.names[pk].toLowerCase() + ' limits rules policy flagging timing best practices');
+}
+add('wiki-ig-windows', 'Wiki', 'Instagram wiki opened on “The two windows”', frame({body: wikiBody('ig'), overlay: wikiModal('ig', 2)}), 'wiki instagram windows 7 days 24 hours');
+
+
+/* VERSIONS (HD-034) */
+const VERS = [
+  {v:4, when:'Oct 4, 10:00', by:'Dmitriy', note:'Shorter pricing message, new link', runs:2},
+  {v:3, when:'Sep 30, 14:22', by:'Dmitriy', note:'Added the webhook step', runs:3},
+  {v:2, when:'Sep 20, 11:05', by:'Dmitriy', note:'Ask for the email before the link', runs:0},
+  {v:1, when:'Sep 12, 09:05', by:'Dmitriy', note:'First published', runs:0},
+];
+const versionsModal = (active=4, opts={}) => `<div class="modal-bg"><div class="vers"><span class="wclose">✕</span><h3>Versions · Pricing lead capture</h3><div class="hint">Every publish creates a new version. Making an older version active keeps the newer ones. Editing the active version and publishing creates the next number. Runs finish on the version they started with.</div>
+<div class="tbl"><table><thead><tr><th>Version</th><th>Published</th><th>Change</th><th>Runs on it</th><th>State</th><th></th></tr></thead><tbody>
+${opts.draft?`<tr><td><b>Draft</b></td><td class="mono">unpublished</td><td>Edits on top of v${active}</td><td>—</td><td><span class="pill">Not published</span></td><td class="act"><span class="btn sec sm">Continue editing</span></td></tr>`:''}
+${VERS.map(r=>`<tr><td><b>v${r.v}</b></td><td class="mono">${r.when} · ${r.by}</td><td>${r.note}</td><td>${r.runs?`${r.runs} in progress`:'—'}</td><td>${r.v===active?'<span class="pill ok">Active</span>':(r.v>active?'<span class="pill info">Newer, not active</span>':'<span class="pill">Previous</span>')}</td><td class="act"><span class="btn sec sm">View</span>${r.v===active?'':'<span class="btn sm">Make active</span>'}</td></tr>`).join('')}
+</tbody></table></div></div></div>`;
+const vBanner = (text, actions) => `<div class="vbanner">${text}<span class="spacer"></span>${actions}</div>`;
+
+add('versions', 'Versions', 'Versions window (v4 active)', frame({body: editorHead('Pricing lead capture', P.ig, 'Live', '<span class="btn ghost">Versions</span><span class="btn ghost">Move to draft</span><span class="btn sec">Save</span><span class="btn">Save and publish</span>') + trigger({p:P.ig}) + IG_STEPS({noAdd:true}), overlay: versionsModal(4)}), 'history list revert');
+add('versions-confirm', 'Versions', 'Make v3 active: confirmation', frame({body: editorHead('Pricing lead capture', P.ig, 'Live') + trigger({p:P.ig}) + IG_STEPS({noAdd:true}), overlay: `<div class="modal-bg"><div class="modal"><h3>Make version 3 active?</h3><p>New comments and messages will run version 3. Version 4 stays in the history and can be made active again at any time. 2 runs in progress on version 4 finish on version 4.</p><p>If you edit version 3 afterwards and publish, it is saved as version 5.</p><div class="foot"><span class="btn sec">Cancel</span><span class="btn">Make version 3 active</span></div></div></div>`}), 'revert modal');
+add('versions-reverted', 'Versions', 'After revert: v3 active, v4 kept', frame({body: editorHead('Pricing lead capture', P.ig, 'Live') + vBanner('<b>Version 3 is active.</b> Version 4 is kept in the history. Editing and publishing will create version 5.', '<span class="btn sec sm">Versions</span>') + trigger({p:P.ig}) + `<div class="card"><h3>Then…</h3><div class="steps">${stepReply(1)}${con()}${stepDM(2,'Send a message','Hey! Reply with your email and I’ll send you the pricing sheet.')}${con()}${stepWait(3,'an email address','72',undefined,{reminder:false, platformName:'Instagram'})}${con()}${stepDM(4,'Send a message','Thanks! Here it is 👇',['Open pricing sheet'],'<div class="meta">Button opens https://oqtastore.example/pricing-v3?e={{email}}</div>')}${con()}${stepHook(5)}</div></div>`, overlay: versionsModal(3) + `<div class="toast ok">✓ Version 3 is active. Version 4 is kept.</div>`}), 'revert done toast');
+add('versions-view-old', 'Versions', 'Viewing a non-active version (read-only)', frame({body: editorHead('Pricing lead capture', P.ig, 'Live', '<span class="btn ghost">Versions</span><span class="btn sec">Edit as a new version</span><span class="btn">Make active</span>') + vBanner('<b>You are viewing version 4.</b> The active version is 3. Nothing here is editable until you make it active or edit it as a new version.', '') + trigger({p:P.ig}) + IG_STEPS({noAdd:true})}), 'read only');
+add('versions-publish-next', 'Versions', 'Publishing edits on the active version → next number', frame({body: editorHead('Pricing lead capture', P.ig, 'Live') + trigger({p:P.ig}) + IG_STEPS({noAdd:true}), overlay: `<div class="modal-bg"><div class="modal"><h3>Publish as version 5?</h3><p>Version 3 stays in the history unchanged. 3 runs in progress on version 3 finish on it; new comments and messages run version 5.</p><div class="foot"><span class="btn sec">Cancel</span><span class="btn">Publish version 5</span></div></div></div>`}), 'confirm');
+add('versions-with-draft', 'Versions', 'Versions window with unpublished draft edits', frame({body: editorHead('Pricing lead capture', P.ig, 'Live', '<span class="btn ghost">Versions</span><span class="btn ghost">Move to draft</span><span class="btn sec">Save</span><span class="btn">Save and publish</span>') + trigger({p:P.ig}) + IG_STEPS({noAdd:true}), overlay: versionsModal(4, {draft:true})}), 'draft row');
+
+
+/* VERSION FILTER CARDS */
+add('runs-vfilter-open', 'Runs', 'Version filter open (multi-select)', frame({body: runsHead() + runFiltersV('All', [], true) + runsTable(runRows)}), 'versions filter dropdown');
+add('runs-vfilter', 'Runs', 'Runs filtered to v3 and v4', frame({body: runsHead() + runFiltersV('All', [3,4]) + runsTable(runRows.filter(r=>r[4]==='v3'||r[4]==='v4')) + `<div class="hint" style="margin-top:10px">Showing 332 runs on v3 and v4. A run keeps the version it started on, so a v3 run that finished after v4 went live still counts for v3.</div>`}), 'versions filtered');
+add('analytics-compare', 'Analytics', 'Analytics: compare versions (v3 vs v4)', frame({body: anHead(versionFilter([3,4]), 'Last 30 days') + `
+<div class="tbl cmp" style="margin-bottom:18px"><table><thead><tr><th>Version</th><th>Published</th><th>Started</th><th>Replied</th><th>Reply rate</th><th>Completed</th><th>Completion</th><th>Emails captured</th><th>Email rate</th><th>Failed</th><th>Median time to email</th></tr></thead><tbody>
+<tr><td><b>v4</b> <span class="pill ok" style="font-size:11px;padding:2px 8px">active</span></td><td class="mono">Oct 4</td><td>38</td><td>30</td><td class="best">79%</td><td>29</td><td>76%</td><td>24</td><td class="best">63%</td><td>1</td><td class="best">41 s</td></tr>
+<tr><td><b>v3</b></td><td class="mono">Sep 30</td><td>294</td><td>206</td><td>70%</td><td>251</td><td class="best">85%</td><td>171</td><td>58%</td><td>8</td><td>2 min 10 s</td></tr>
+</tbody></table></div>
+<div class="chart">${[[30,22],[45,30],[60,40],[55,38],[80,60],[95,70],[70,52],[88,66],[100,72],[76,58],[64,50],[90,70],[85,66],[60,48]].map(([a,b])=>`<i style="height:${a}%"></i><i class="b" style="height:${b}%"></i>`).join('')}</div>
+<div class="legend"><span><i style="background:#c4b5fd"></i>Started</span><span><i style="background:#7c3aed"></i>Emails captured</span><span style="margin-left:auto">Per day, selected versions combined. Green cells mark the better value.</span></div>
+<div class="callout info" style="margin-top:16px"><b>What this says</b>v4 gets more replies to the first message (79% vs 70%) and captures emails from more of the people who start (63% vs 58%), and faster, but fewer finish the whole flow (76% vs 85%). v4 has run for one day; wait for about 100 runs before deciding.</div>`}), 'versions compare analytics table');
+add('analytics-vfilter-open', 'Analytics', 'Analytics: version filter open', frame({body: anHead(versionFilter([], true), 'Last 30 days') + `<div class="stats" style="grid-template-columns:repeat(5,1fr)"><div class="stat"><b>412</b><span>Started · all versions</span></div><div class="stat"><b>72%</b><span>Reply rate · 297 replied</span></div><div class="stat"><b>371</b><span>Completed · 90%</span></div><div class="stat"><b>298</b><span>Emails captured</span></div><div class="stat"><b>9</b><span>Failed</span></div></div><div class="chart">${[30,45,60,55,80,95,70,88,100,76,64,90,85,60].map(h=>`<i style="height:${h}%"></i>`).join('')}</div>`}), 'versions dropdown analytics');
+add('analytics-single-version', 'Analytics', 'Analytics: one version selected (v2)', frame({body: anHead(versionFilter([2]), 'All time') + `<div class="stats" style="grid-template-columns:repeat(5,1fr)"><div class="stat"><b>61</b><span>Started · v2</span></div><div class="stat"><b>64%</b><span>Reply rate · 39 replied</span></div><div class="stat"><b>52</b><span>Completed · 85%</span></div><div class="stat"><b>31</b><span>Emails captured · 51%</span></div><div class="stat"><b>2</b><span>Failed</span></div></div><div class="chart">${[20,35,50,45,60,40,30,25,15,10,5,0,0,0].map(h=>`<i style="height:${h}%"></i>`).join('')}</div><div class="hint" style="margin-top:8px">v2 was active from Sep 20 to Sep 30. Its runs stop when v3 took over; nothing was deleted.</div>`}), 'versions single');
+
+/* render */
+const groups = [...new Set(cards.map(c=>c.group))];
+document.getElementById('gallery').innerHTML = cards.map(c=>`<section class="gc" id="${c.id}" data-label="${c.label}"><header><h2>${c.group.toUpperCase()} · ${c.title}</h2><span>#${c.id}</span></header><div class="gs">${c.html}</div></section>`).join('');
+document.querySelector('.gh p').insertAdjacentHTML('beforeend', ` · ${cards.length} states`);
+</script>
+
+<script>
+/* wiki interactions: open from any editor, switch articles, close */
+document.addEventListener('click', (e) => {
+  const btn = e.target.closest('.wikibtn');
+  if (btn) { const app = btn.closest('.app'); app.querySelectorAll('.wiki-bg').forEach(x=>x.remove()); app.insertAdjacentHTML('beforeend', wikiModal(btn.dataset.p, 0)); return; }
+  const nav = e.target.closest('.wnav div[data-i]');
+  if (nav) { const w = nav.closest('.wiki'); const pk = w.dataset.p; const i = +nav.dataset.i; const a = WIKI[pk][i];
+    w.querySelectorAll('.wnav div[data-i]').forEach(d=>d.classList.toggle('on', d===nav));
+    const art = w.querySelector('.wart'); art.innerHTML = `<span class="wclose">✕</span><h2>${a.t}</h2>${a.h}<div class="wfoot">Updated October 2026. Facts marked (verify) should be checked against the platform’s current documentation before relying on them.</div>`; art.scrollTop = 0; return; }
+  if (e.target.closest('.wclose')) { const bg = e.target.closest('.modal-bg'); if (bg) bg.remove(); }
+});
+</script>
+</body>
+</html>

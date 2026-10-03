@@ -96,4 +96,58 @@ Format:
 - Decision: Run 1 `chore/scaffold` (Light): repo, monorepo skeleton, compose, CI, /health, CLAUDE.md, README skeleton. Run 2 `feat/domain-schema` (Standard): branded ids, step kinds, automation versions, migrations, repositories. Run 3 `feat/webhook-ingest` (Standard): signature verification, event dedupe, matching, run creation with supersede. Run 4 `feat/executor` (Standard): Postgres queue and timers, worker, step execution, provider interface, Instagram provider, fake Graph server, driver. Run 5 `feat/automations-api` (Standard): CRUD, publish, versioning, run inspection. Run 6 `docs/design-and-release` (Full): design doc, README, AI-usage note, fresh-clone hand-off.
 - Why: Each run is one coherent PR with its own verification. Order follows dependencies: nothing is briefed before the types and tables it rests on exist.
 - Affects: process
+- Status: superseded by AD-010
+
+## AD-010  Delivery plan v2: capability model first, one provider per class, then testing tooling
+- When: 2026-10-04T01:25+03:00
+- Who: Claude (Fable 5.1), session ffba4ca6
+- Where: replanning after HD-019 to HD-024
+- Decision: Run 1 `chore/scaffold` (Light): repo, monorepo skeleton, compose, CI, /health, CLAUDE.md, README skeleton. Run 2 `feat/capability-model` (Standard): the platform capability record type, the declared records for all assessed platforms, the step kinds, the automation schema with versions, and publish-time validation as pure functions with property tests. Run 3 `feat/gateway-and-ingest` (Standard): the gateway port, the fake adapter and the HTTP adapter, the ingestion endpoint with event dedupe, matching, run creation with supersede. Run 4 `feat/executor` (Standard): Postgres queue and timers, worker, step execution for all five step kinds, deadlines from the capability record, class B fallback, outbound webhook. Run 5 `feat/providers` (Standard): executable providers Instagram, Bluesky, YouTube, WhatsApp against the fake gateway, each with its record and tests. Run 6 `feat/automations-api` (Standard): CRUD, publish, archive, versioning, run and log inspection. Run 7 `feat/test-tooling` (Standard): the scenario driver that replays event scripts per platform class with duplicates, reordering and bursts, and asserts on the resulting runs and gateway calls; soak runs. Run 8 `docs/design-and-release` (Full): design doc, README, AI-usage note, fresh-clone hand-off. Further platforms come after run 8 as their own runs.
+- Why: HD-022 orders the work as model, one provider per class, tooling, then breadth. HD-023 puts the gateway adapters before ingestion because ingestion is the gateway calling in.
+- Affects: process
+- Status: active
+
+## AD-011  Delivery plan v3: the stand is built alongside the service, package by package
+- When: 2026-10-04T01:45+03:00
+- Who: Claude (Fable 5.1), session ffba4ca6
+- Where: replanning after HD-025
+- Decision: Run 1 `chore/scaffold` (Light, in progress). Run 2 `feat/gateway-contract` (Standard): `packages/gateway-contract` with the TypeBox schemas both sides share: platform ids, account and user refs, inbound events (comment received, message received), outbound operations (reply to comment, send message), error codes the gateway returns for rule violations. Run 3 `feat/capability-model` (Standard, service): capability records, step kinds, automation schema with versions, publish-time validation as pure functions with property tests. Run 4 `feat/stand-core` (Standard, stand): `packages/stand` with the platform worlds (accounts, users, posts, comments, conversations), per-platform rule enforcement, the gateway HTTP API, event delivery to the service with duplicate, reorder and burst knobs, a scenario API (create user, comment as user, message as user), and a controllable clock. Run 5 `feat/ingest-and-runs` (Standard, service): gateway port with fake and HTTP adapters, ingestion endpoint, event dedupe, matching, run creation with supersede. Run 6 `feat/executor` (Standard, service): Postgres queue and timers, worker, five step kinds, deadlines from the capability record, class B fallback, outbound webhook. Run 7 `feat/providers` (Standard, both sides): Instagram, Bluesky, YouTube and WhatsApp as executable providers in the service and as emulated worlds in the stand. Run 8 `feat/automations-api` (Standard, service): CRUD, publish, archive, versioning, run and log inspection. Run 9 `feat/stand-web` (Standard, stand): the web interface: accounts across networks, posts and comment threads, inboxes, user-emulation mode, event log, clock control. Run 10 `feat/test-cycles` (Standard): the cycle runner that drives the stand, waits for the service, and asserts on runs, gateway calls and stand state; runnable headless and from the UI. Run 11 `docs/design-and-release` (Full). More platforms follow as their own runs.
+- Why: HD-025 adds the stand; HD-022 orders model, one provider per class, tooling, breadth. The contract package comes first because both sides build against it.
+- Affects: process
+- Status: active
+
+## AD-012  The stand enforces platform rules independently of the service's capability records
+- When: 2026-10-04T01:45+03:00
+- Who: Claude (Fable 5.1), session ffba4ca6
+- Where: designing the stand after HD-025
+- Decision: The stand does not import the service's capability records. Each emulated platform in the stand implements its rules on its own (private reply once per comment and only within the window, conversation window opened by the user's message, recipient settings, message limits, own-activity echo), written from the platforms' public documentation. The two sides share only `packages/gateway-contract`. A rule violation by the service is answered by the stand with the gateway error code a real gateway would return, and is recorded in the stand's event log.
+- Why: If both sides read the same record, a wrong record passes every test. Two independent encodings of the same public facts make a disagreement visible.
+- Affects: packages/stand rule modules, packages/gateway-contract error codes, test cycles
+- Status: active
+
+## AD-013  Both sides run on an injectable clock that the stand can advance
+- When: 2026-10-04T01:45+03:00
+- Who: Claude (Fable 5.1), session ffba4ca6
+- Where: designing the stand after HD-025
+- Decision: The service reads time through one clock function. In production it is the system clock. In test mode (`CLOCK_MODE=controlled`) an authenticated test endpoint sets the current time, and the stand uses the same mechanism for its worlds. A test cycle advances both clocks together to cross the 24-hour and 7-day boundaries in seconds. Postgres timers compare against the injected time, not `now()`.
+- Why: Window rules cannot be tested by waiting. Two clocks that can drift would make window tests lie.
+- Affects: packages/shared clock, service worker and timers, stand worlds, test cycles
+- Status: active
+
+## AD-014  The stand web interface is a Vite and React single-page app served by the stand service
+- When: 2026-10-04T01:45+03:00
+- Who: Claude (Fable 5.1), session ffba4ca6
+- Where: designing the stand after HD-025
+- Decision: `packages/stand-web` is a Vite and React app built to static files and served by the stand service on its own port. It talks to the stand's HTTP API only. Next.js was considered and set aside.
+- Why: The interface is test tooling, not product. A static SPA adds one build step and no server runtime to the compose stack. Next.js would add a second Node server and a heavier Docker build for no gain here.
+- Affects: packages/stand-web, packages/stand static serving, docker-compose
+- Status: active
+
+## AD-015  One HTTP adapter for both modes; mode selects the target, the clock and the test endpoints
+- When: 2026-10-04T02:20+03:00
+- Who: Claude (Fable 5.1), session ffba4ca6
+- Where: implementing HD-026
+- Decision: `GATEWAY_MODE` is `real` or `test`. Both modes use the same HTTP gateway adapter; `GATEWAY_URL` names the gateway service in `real` mode and the stand in `test` mode. `test` mode also enables the controlled clock (AD-013) and the test-only endpoints; `real` mode refuses to start if the controlled clock or test endpoints are enabled. The in-process fake adapter exists only for the service's own unit and integration tests and is not a mode. Service-to-service calls carry a shared-secret header in both directions (`X-Service-Token`, constant-time compared), because there is no TLS inside the cluster and the ingestion endpoint must not accept events from anyone who can reach the port.
+- Why: One code path for both modes is the point of the stand. The guard against test features in real mode is a startup check, so it cannot be forgotten. The shared secret is the smallest honest answer to plain HTTP between containers; mTLS or a service mesh would be the real product's decision and is out of scope.
+- Affects: service config module, gateway HTTP adapter, ingestion route, stand gateway API, docker-compose
 - Status: active

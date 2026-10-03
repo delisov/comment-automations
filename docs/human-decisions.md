@@ -179,6 +179,87 @@ Format:
 - Affects: packages/shared provider interface, packages/api providers/, executor, docs/design.md
 - Status: active
 
+## HD-019  Assess every candidate platform before writing more code
+- When: 2026-10-04T00:55+03:00
+- Who: Dmitriy Elisov
+- Where: Claude Code session, chat message
+- Decision: Stop implementation. First assess all platforms where comment-triggered automations could run: which expose comment events, public replies, private replies and direct messages through their APIs, under which rules. The assessment feeds the design before any further run.
+- Why: The platform set and its constraints decide the shape of the abstraction.
+- Affects: docs/design.md, provider layer, run plan (AD-009 is paused)
+- Status: active
+
+## HD-020  Model the "already existing app" as an abstract layer
+- When: 2026-10-04T00:55+03:00
+- Who: Dmitriy Elisov
+- Where: Claude Code session, chat message
+- Decision: The brief says the system already receives comments and messages, replies to comments, and sends messages. Treat that existing system as an abstract layer with those four capabilities. The automation system is built on top of that layer and never re-implements it.
+- Why: Keeps the design within the brief's stated assumptions and separates what exists from what is being designed.
+- Affects: packages/shared port types, executor, docs/design.md, the fake implementation in tools/
+- Status: active
+
+## HD-021  The hard problem is the structured handling of platform limits and features
+- When: 2026-10-04T01:10+03:00
+- Who: Dmitriy Elisov
+- Where: Claude Code session, chat message
+- Decision: The design centres on a structured model of each platform's capabilities and limits (which events exist, what replies and messages are allowed, within which windows, to whom). Webhook plumbing is secondary. Every automation is checked against that model when published and enforced against it when run.
+- Why: Platform rules differ in kind, not only in numbers. A flow that is legal on Instagram is impossible on YouTube. Treating this as data makes the differences visible, testable and explainable.
+- Affects: docs/platforms.md, packages/shared capability model, publish-time validation, executor, docs/design.md
+- Status: active
+
+## HD-022  One executable platform per class first, then testing tooling, then more platforms
+- When: 2026-10-04T01:20+03:00
+- Who: Dmitriy Elisov
+- Where: Claude Code session, structured question
+- Decision: Implement every platform class with at least one executable provider first (class A Instagram, class B Bluesky, class C YouTube, class E WhatsApp; class D has no comment events and stays declared only). Then build dedicated testing tooling and test the whole extensively. Only after that add further platforms.
+- Why: Proves the capability model end to end before widening it.
+- Affects: providers, capability records, tools/ (testing tooling), run plan
+- Status: active
+
+## HD-023  Microservices in Kubernetes; the gateway is found by service discovery
+- When: 2026-10-04T01:20+03:00
+- Who: Dmitriy Elisov
+- Where: Claude Code session, structured question
+- Decision: Assume the real product is a set of microservices in a Kubernetes cluster. The platform gateway (the existing app) is another service reachable by service discovery. The automation system talks to it through an interface with two adapters: a fake for tests and the demo, and an HTTP adapter that mimics calls to a real gateway behind it.
+- Why: This is how the real product is believed to look.
+- Affects: gateway port and adapters, ingestion endpoint, docs/design.md deployment section, docker-compose (fake gateway as its own service)
+- Status: active
+
+## HD-024  Class B recipient fallback is fully implemented now
+- When: 2026-10-04T01:20+03:00
+- Who: Dmitriy Elisov
+- Where: Claude Code session, structured question
+- Decision: Every `send_message` step on a class B platform carries `onRecipientUnreachable` with `fail`, `skip` or `publicReplyInstead`. Publish-time validation requires it; the executor implements all three; tests cover them against the fake gateway.
+- Why: not stated
+- Affects: automation schema, validation, executor, tests
+- Status: active
+
+## HD-025  Build a real test stand that emulates the social platforms
+- When: 2026-10-04T01:40+03:00
+- Who: Dmitriy Elisov
+- Where: Claude Code session, chat message
+- Decision: Build a test stand on the other side of the automation service. It emulates every supported platform with accounts, posts and users; emulated users leave comments and write direct messages; it implements every hook and endpoint the gateway side has. It runs test cycles. It has a web interface that shows all accounts across the networks and lets a person enter user-emulation mode and act as that user. Everything the automation service can do must be observable and verifiable on the stand, in simplified form.
+- Why: The software cannot be verified against real platforms here, and a platform-rule violation must be visible as a failure, not a silent success. Expected to be about as much work as the service itself.
+- Affects: new packages for the stand and its web UI, the gateway contract package, run plan, docker-compose, README
+- Status: active
+
+## HD-026  Two modes: "real" and "test"; plain HTTP in both
+- When: 2026-10-04T02:15+03:00
+- Who: Dmitriy Elisov
+- Where: Claude Code session, chat message
+- Decision: The automation service runs in one of two modes. In "real" mode it talks over plain HTTP to the platform gateway, another container in the real product that does not exist yet. In "test" mode every call goes to the test stand instead. No TLS between services: TLS is offloaded at the edge. The stand's web portal opens each social network and shows its users, accounts, posts and comments, and each user's direct messages. Every aspect of what the service does must be visible there.
+- Why: The service must be verifiable end to end without the real gateway, and the same code path must serve both.
+- Affects: service configuration, gateway HTTP adapter, ingestion endpoint, stand portal, docs/design.md deployment section
+- Status: active
+
+## HD-027  Draft both interfaces as static HTML before implementing
+- When: 2026-10-04T02:35+03:00
+- Who: Dmitriy Elisov
+- Where: Claude Code session, chat message
+- Decision: Before implementation continues, draft the interface of the automation platform (the customer-facing product) and the interface of the test stand portal as static HTML pages for review.
+- Why: See the product and its verification surface before committing to code.
+- Affects: docs/mockups, later decisions on a customer-facing web package
+- Status: active
+
 ## HD-028  The product UI shows one feature; everything else is the host platform's own navigation
 - When: 2026-10-04T03:10+03:00
 - Who: Dmitriy Elisov
@@ -231,4 +312,76 @@ Format:
 - Decision: Deliver the product interface as a static screen gallery in the same format as the test-stand gallery: one card per screen state, a search box, consistent components, covering every page and every state for every supported platform.
 - Why: Review needs the whole surface at once, not one happy-path screen.
 - Affects: docs/mockups/platform-gallery.html
+- Status: active
+
+## HD-034  Versions are immutable; revert activates an older version; edits always create a new version
+- When: 2026-10-04T04:20+03:00
+- Who: Dmitriy Elisov
+- Where: Claude Code session, review of the interface gallery
+- Decision: Every publish creates a new, immutable version. The UI has a window that lists all versions and lets the user make any previous version active. Making version 3 active while version 4 exists does not delete version 4. Editing the now-active version 3 and publishing creates version 5. Nothing is overwritten and nothing is deleted. Runs keep the version they started on.
+- Why: Full history and safe rollback; the same rule the backend already applies to runs.
+- Affects: automation_versions schema (active pointer separate from max version), publish and revert API, versions window in the UI, docs/design.md
+- Status: active
+
+## HD-035  Runs and Analytics filter by versions (multi-select) so creators can compare what works
+- When: 2026-10-04T04:50+03:00
+- Who: Dmitriy Elisov
+- Where: Claude Code session, review of the interface gallery
+- Decision: The Runs tab and the Analytics tab of an automation offer a multi-select filter by version. Runs shows only runs on the selected versions. Analytics shows the selected versions side by side (started, completed, completion rate, emails captured, failed) so the creator can see which version performs better.
+- Why: Versions are kept so that the creator can learn from them; comparison is the point.
+- Affects: runs query (version filter), analytics aggregation per version, UI filters, docs/design.md
+- Status: active
+
+## HD-036  Analytics shows reply rate
+- When: 2026-10-04T05:00+03:00
+- Who: Dmitriy Elisov
+- Where: Claude Code session, review of the interface gallery
+- Decision: Analytics shows the reply rate: the share of started runs in which the person answered the first message. It appears as a stat tile and as a column in the version comparison.
+- Why: Reply rate is the first signal of whether the opening message works; completion and email capture depend on it.
+- Affects: analytics aggregation (replied count per version), UI stats and comparison table
+- Status: active
+
+## HD-037  "Ask once more" uses its own message, never a repeat of the first one
+- When: 2026-10-04T05:10+03:00
+- Who: Dmitriy Elisov
+- Where: Claude Code session, review of the interface gallery
+- Decision: When a wait step is set to "Ask once more, then keep waiting", the step carries a separate message text for that second ask. The automation never sends the same message twice.
+- Why: A repeated message reads as a bot and gets reported.
+- Affects: wait_for_reply step schema (nudgeMessage), executor, editor
+- Status: active
+
+## HD-038  The wait step handles "no reply at all" and "reply without the expected content" separately
+- When: 2026-10-04T05:25+03:00
+- Who: Dmitriy Elisov
+- Where: Claude Code session, review of the interface gallery
+- Decision: A wait step has two branches. If the person does not reply at all, the step may send one reminder after a chosen delay (its own text), and the run ends as expired after the give-up time. If the person replies without the expected content (for example no email address), the step asks once more with its own text, then keeps waiting or ends. The reminder branch is offered only on networks where a second message can be sent before the person replies; on Instagram and Facebook it cannot, and the editor says so in one line.
+- Why: Both situations happen and need different handling; the first depends on the network's messaging window.
+- Affects: wait_for_reply step schema (reminderAfter, reminderMessage, nudgeMessage, afterNudge), executor timers, capability record (whether a reminder is sendable before the first reply), editor
+- Status: active
+
+## HD-039  The mockups are branded "Boltato" with a galvanized steel bolt as the logo
+- When: 2026-10-04T05:40+03:00
+- Who: Dmitriy Elisov
+- Where: Claude Code session
+- Decision: The product name in the interface mockups is Boltato and the logo is a galvanized steel bolt. The visual language stays the one taken from the real product.
+- Why: A joke that also keeps the real brand out of the deliverable.
+- Affects: docs/mockups, later web package branding
+- Status: active
+
+## HD-040  Merging into main is delegated to the AI for the build
+- When: 2026-10-04T05:55+03:00
+- Who: Dmitriy Elisov
+- Where: Claude Code session, before the overnight build
+- Decision: The AI merges its own pull requests into `main` once the gates are green. "You build it, you break it, you fix it." Supersedes the "may the agent merge: no" slot of the adapter.
+- Why: Ten hours of unattended runs, each depending on the previous one being on main.
+- Affects: process, adapter
+- Status: active
+
+## HD-041  Scope is everything: engine, product UI and test stand; definition of done is an end-to-end demo
+- When: 2026-10-04T05:55+03:00
+- Who: Dmitriy Elisov
+- Where: Claude Code session, before the overnight build
+- Decision: Build the engine, the customer-facing UI (from the gallery) and the test stand with its portal. Done means: open the UI, create an automation on any platform, go to the test stand, emulate a user, comment under a post, and receive the reply, the direct message and the email reminder exactly as the automation was set up. Supersedes AD-004's "no web package".
+- Why: The whole loop must be demonstrable by the human without help.
+- Affects: run plan, packages/web, packages/stand, packages/stand-web, compose stack
 - Status: active
