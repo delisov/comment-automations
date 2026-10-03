@@ -1,0 +1,360 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>DM automations · Screen gallery</title>
+<style>
+  :root{
+    --bg:#fff;--side:#f9fafb;--line:#e5e7eb;--text:#030712;--mute:#4b5563;--faint:#9ca3af;
+    --primary:#7c3aed;--primary-h:#6d28d9;--primary-0:#f5f3ff;--primary-1:#ede9fe;
+    --nav-on-bg:#eff6ff;--nav-on:#2563eb;
+    --ok:#15803d;--ok-bg:#dcfce7;--warn:#b45309;--warn-bg:#fff7ed;--warn-line:#fed7aa;--bad:#b91c1c;--bad-bg:#fef2f2;--bad-line:#fecaca;
+    --info:#1d4ed8;--info-bg:#eff6ff;--wait:#6d28d9;--wait-bg:#ede9fe;--gray-bg:#f3f4f6;
+    --font:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:#eef0f4;font-family:var(--font);color:var(--text);font-size:14px;line-height:1.45;-webkit-font-smoothing:antialiased}
+  /* gallery chrome */
+  .gh{position:sticky;top:0;z-index:50;background:#fffffff2;backdrop-filter:blur(12px);border-bottom:1px solid #d9dde5;padding:14px 24px}
+  .gh h1{font-size:18px;margin:0 0 4px}
+  .gh p{margin:0 0 10px;color:var(--mute);font-size:13px;max-width:900px}
+  .gh input{width:min(520px,100%);padding:9px 12px;border:1px solid #cfd5df;border-radius:8px;font:inherit}
+  .gh nav{display:flex;gap:14px;flex-wrap:wrap;margin-top:8px;font-size:12px}
+  .gh nav a{color:var(--nav-on);text-decoration:none}
+  .gm{max-width:1360px;margin:24px auto;padding:0 20px}
+  .gc{background:#fff;border:1px solid #d9dde5;border-radius:14px;margin:22px 0;overflow:hidden;scroll-margin-top:140px}
+  .gc>header{display:flex;justify-content:space-between;align-items:center;gap:14px;padding:12px 18px;background:#f7f8fb;border-bottom:1px solid #d9dde5}
+  .gc>header h2{font-size:13px;margin:0;font-weight:600}
+  .gc>header span{font-size:12px;color:var(--mute)}
+  .gc[hidden]{display:none}
+  .gs{padding:0;background:#fff}
+  .gs-note{padding:10px 18px;background:#fbfbfd;border-top:1px solid #eceef3;color:var(--mute);font-size:12px}
+  /* app frame */
+  .app{display:grid;grid-template-columns:230px 1fr;min-height:640px;position:relative}
+  .side{background:var(--side);border-right:1px solid var(--line);padding:18px 14px;display:flex;flex-direction:column}
+  .brand{display:flex;align-items:center;gap:10px;padding:0 6px 14px}
+  .brand .logo{width:28px;height:28px;border-radius:50%;background:#fff;border:1px solid var(--line);display:grid;place-items:center;font-size:13px}
+  .brand b{display:block;font-size:17px;line-height:1.1}
+  .brand small{color:var(--nav-on);font-size:11px}
+  .switch{font-size:12px;color:var(--mute);padding:6px 8px 14px;display:flex;justify-content:space-between}
+  .navsec{font-size:10px;letter-spacing:.08em;color:var(--mute);padding:6px 8px;text-transform:uppercase}
+  .nav a{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:8px;color:var(--mute);font-weight:500;text-decoration:none;font-size:14px}
+  .nav a.on{background:var(--nav-on-bg);color:var(--nav-on)}
+  .nav a svg{flex:none;opacity:.85}
+  .nav a .chev{margin-left:auto;color:var(--faint)}
+  .main{padding:26px 32px 40px;min-width:0}
+  .ph{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:18px}
+  .ph h1{font-size:30px;font-weight:600;margin:0;letter-spacing:-.01em}
+  .ph .sub{color:var(--mute);margin-top:4px;font-size:15px}
+  .crumbs{font-size:13px;color:var(--mute);margin-bottom:6px}
+  .crumbs a{color:var(--nav-on);text-decoration:none}
+  .btn{display:inline-flex;align-items:center;gap:8px;padding:9px 16px;border-radius:8px;border:1px solid transparent;background:var(--primary);color:#fff;font-weight:600;font-size:14px;cursor:pointer;white-space:nowrap}
+  .btn.sec{background:#fff;color:var(--text);border-color:var(--line)}
+  .btn.ghost{background:transparent;color:var(--mute);border-color:transparent}
+  .btn.danger{background:#dc2626}
+  .btn.dis{background:#f3f4f6;color:#9ca3af;cursor:default}
+  .btn.sm{padding:6px 12px;font-size:13px}
+  .row{display:flex;align-items:center;gap:10px}
+  .tabs{display:flex;gap:28px;border-bottom:1px solid var(--line);margin:4px 0 22px}
+  .tabs span{padding:10px 2px;color:var(--text);font-weight:500}
+  .tabs span.on{color:var(--nav-on);border-bottom:2px solid var(--nav-on)}
+  .card{border:1px solid var(--line);border-radius:12px;background:#fff;padding:18px 20px;margin-bottom:16px}
+  .card h3{margin:0 0 12px;font-size:16px;font-weight:600}
+  .card .hint{color:var(--mute);font-size:13px}
+  .pill{display:inline-flex;align-items:center;gap:6px;padding:4px 11px;border-radius:999px;font-size:13px;font-weight:600;background:var(--gray-bg);color:var(--mute)}
+  .pill.ok{background:var(--ok-bg);color:var(--ok)} .pill.bad{background:var(--bad-bg);color:var(--bad)} .pill.warn{background:var(--warn-bg);color:var(--warn)} .pill.wait{background:var(--wait-bg);color:var(--wait)} .pill.info{background:var(--info-bg);color:var(--info)}
+  table{width:100%;border-collapse:collapse}
+  .tbl{border:1px solid var(--line);border-radius:12px;overflow:hidden;background:#fff}
+  th{background:#f9fafb;text-align:left;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--mute);font-weight:600;padding:14px 16px;border-bottom:1px solid var(--line)}
+  td{padding:14px 16px;border-bottom:1px solid var(--line);font-size:15px;vertical-align:middle}
+  tr:last-child td{border-bottom:0}
+  td .sub{display:block;color:var(--mute);font-size:13px;margin-top:2px}
+  .mono{font-family:var(--mono);font-size:13px;color:var(--mute)}
+  .plat{display:inline-flex;align-items:center;gap:9px}
+  .plat i{width:22px;height:22px;border-radius:5px;display:inline-grid;place-items:center;color:#fff;font-size:10px;font-weight:700;flex:none}
+  .ig i{background:#d6249f}.fb i{background:#1877f2}.th i{background:#111}.x i{background:#000}.bs i{background:#1185fe}.yt i{background:#ff0000}.li i{background:#0a66c2}.wa i{background:#25d366}.tt i{background:#111}.pi i{background:#e60023}
+  .callout{border-radius:10px;padding:14px 16px;font-size:14px;line-height:1.5}
+  .callout b{display:block;margin-bottom:4px}
+  .callout.warn{background:var(--warn-bg);color:#7c2d12}.callout.warn b{color:#c2410c}
+  .callout.bad{background:var(--bad-bg);color:#7f1d1d}.callout.bad b{color:#b91c1c}
+  .callout.info{background:var(--info-bg);color:#1e3a8a}.callout.info b{color:#1d4ed8}
+  .callout.ok{background:var(--ok-bg);color:#14532d}.callout.ok b{color:#15803d}
+  .empty{border:1px solid var(--line);border-radius:12px;padding:48px 20px;text-align:center}
+  .empty h3{margin:0 0 6px;font-size:17px}.empty p{margin:0 0 18px;color:var(--mute)}
+  .field{margin-bottom:14px}
+  .field label{display:block;font-weight:600;font-size:14px;margin-bottom:6px}
+  .field .desc{color:var(--mute);font-size:13px;margin-bottom:6px}
+  .input{display:block;width:100%;max-width:560px;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:#fff;font:inherit;font-size:14px;color:var(--text)}
+  .input.ta{min-height:76px;white-space:pre-wrap}
+  .input.err{border-color:#dc2626;background:#fff7f7}
+  .errtext{color:#b91c1c;font-size:13px;margin-top:5px}
+  .counter{font-size:12px;color:var(--faint);margin-top:4px;text-align:right;max-width:560px}
+  .kw{display:flex;flex-wrap:wrap;gap:6px;max-width:560px;padding:8px 10px;border:1px solid var(--line);border-radius:8px}
+  .kw span{background:var(--primary-1);color:var(--primary-h);border-radius:6px;padding:3px 9px;font-size:13px;font-weight:500}
+  .kw .kwph{color:var(--faint);font-size:13px;margin:3px 0 0 2px}
+  .seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+  .seg span{padding:7px 14px;font-size:13px;color:var(--mute)}
+  .seg span.on{background:var(--primary);color:#fff;font-weight:600}
+  .chk{display:flex;align-items:center;gap:10px;font-size:14px;margin:6px 0}
+  .chk i{width:18px;height:18px;border:1.5px solid #9ca3af;border-radius:4px;display:inline-grid;place-items:center;font-size:12px}
+  .chk i.on{background:var(--primary);border-color:var(--primary);color:#fff}
+  .tog{width:38px;height:22px;border-radius:999px;background:#d1d5db;position:relative;display:inline-block;flex:none}
+  .tog::after{content:"";position:absolute;top:3px;left:3px;width:16px;height:16px;border-radius:50%;background:#fff}
+  .tog.on{background:var(--primary)}.tog.on::after{left:19px}
+  .steps{display:flex;flex-direction:column;gap:10px}
+  .step{border:1px solid var(--line);border-radius:12px;padding:14px 16px;background:#fff;position:relative}
+  .step .t{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+  .step .t b{font-size:15px}
+  .step .t .act{display:flex;gap:6px;color:var(--faint);font-size:13px}
+  .step .n{width:24px;height:24px;border-radius:50%;background:var(--gray-bg);color:var(--mute);font-size:12px;font-weight:600;display:inline-grid;place-items:center;margin-right:8px}
+  .step .msg{background:#f9fafb;border-radius:8px;padding:10px 12px;font-size:14px;white-space:pre-wrap;max-width:560px}
+  .step .btnlike{display:inline-block;margin:8px 6px 0 0;border:1px solid #c4b5fd;color:#5b21b6;border-radius:8px;padding:5px 12px;font-size:13px;font-weight:600}
+  .step .meta{color:var(--mute);font-size:13px;margin-top:8px}
+  .connector{height:14px;border-left:2px solid var(--line);margin-left:27px}
+  .addstep{border:1px dashed #c4b5fd;color:var(--primary-h);border-radius:12px;padding:12px;text-align:center;font-weight:600;font-size:14px;background:var(--primary-0)}
+  .menu{position:absolute;left:0;right:0;top:46px;background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:0 10px 25px rgba(0,0,0,.1);padding:8px;z-index:3;max-width:360px;margin:0 auto;text-align:left}
+  .menu div{padding:10px 12px;border-radius:8px;font-size:14px}
+  .menu div b{display:block;font-size:14px}.menu div small{color:var(--mute);font-size:12px}
+  .menu div.hov{background:var(--gray-bg)}
+  .modal-bg{position:absolute;inset:0;background:rgba(3,7,18,.45);display:grid;place-items:center;z-index:5}
+  .modal{width:520px;max-width:92%;background:#fff;border-radius:14px;padding:24px;box-shadow:0 20px 40px rgba(0,0,0,.2)}
+  .modal h3{margin:0 0 4px;font-size:18px}.modal p{margin:0 0 16px;color:var(--mute);font-size:14px}
+  .modal .foot{display:flex;justify-content:flex-end;gap:10px;margin-top:18px}
+  .select{display:flex;justify-content:space-between;align-items:center;padding:10px 12px;border:1px solid var(--line);border-radius:8px;max-width:560px;font-size:14px}
+  .select.open{border-color:var(--primary)}
+  .opts{border:1px solid var(--line);border-radius:10px;margin-top:6px;max-width:560px;box-shadow:0 10px 25px rgba(0,0,0,.08);overflow:hidden}
+  .opts div{padding:10px 12px;display:flex;justify-content:space-between;align-items:center;font-size:14px}
+  .opts div.hov{background:var(--gray-bg)}
+  .opts div.dis{color:var(--faint)}
+  .opts small{color:var(--faint);font-size:12px}
+  .drawer{position:absolute;top:0;right:0;bottom:0;width:480px;background:#fff;border-left:1px solid var(--line);box-shadow:-10px 0 30px rgba(0,0,0,.08);padding:22px 24px;z-index:4;overflow:auto}
+  .drawer h3{margin:0 0 2px;font-size:18px}
+  .drawer .close{position:absolute;right:18px;top:18px;color:var(--faint)}
+  .tl{list-style:none;padding:0;margin:14px 0 0}
+  .tl li{position:relative;padding:8px 0 8px 22px;font-size:14px;border-left:2px solid var(--line);margin-left:6px}
+  .tl li::before{content:"";position:absolute;left:-6px;top:14px;width:10px;height:10px;border-radius:50%;background:#9ca3af}
+  .tl li.ok::before{background:#16a34a}.tl li.wait::before{background:#7c3aed}.tl li.bad::before{background:#dc2626}.tl li.mute::before{background:#d1d5db}
+  .tl time{display:block;font-size:12px;color:var(--faint)}
+  .kv{display:grid;grid-template-columns:150px 1fr;gap:6px 12px;font-size:14px;margin-top:10px}
+  .kv span:nth-child(odd){color:var(--mute)}
+  .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:18px}
+  .stat{border:1px solid var(--line);border-radius:12px;padding:16px 18px}
+  .stat b{font-size:26px;font-weight:600;display:block}.stat span{color:var(--mute);font-size:13px}
+  .chart{height:140px;border:1px solid var(--line);border-radius:12px;display:flex;align-items:flex-end;gap:6px;padding:14px}
+  .chart i{flex:1;background:#c4b5fd;border-radius:4px 4px 0 0;display:block}
+  .toast{position:absolute;right:24px;bottom:24px;background:#111827;color:#fff;border-radius:10px;padding:12px 16px;font-size:14px;box-shadow:0 10px 25px rgba(0,0,0,.2);z-index:6}
+  .toast.ok{background:#14532d}.toast.bad{background:#7f1d1d}
+  .skel{height:14px;border-radius:6px;background:linear-gradient(90deg,#f3f4f6,#e5e7eb,#f3f4f6);margin:8px 0}
+  .diag{position:absolute;left:50%;transform:translateX(-50%);bottom:14px;background:#111;color:#ffd479;border:1px dashed #ffb020;border-radius:999px;padding:7px 14px;font:12px var(--mono);z-index:7;display:flex;gap:14px;align-items:center;opacity:.95}
+  .diag em{color:#9ca3af;font-style:normal}
+  .diag .x{color:#fff;cursor:pointer}
+  .helpbubble{position:absolute;right:22px;bottom:22px;width:48px;height:48px;border-radius:50%;background:#f59e0b;box-shadow:0 6px 16px rgba(0,0,0,.2)}
+  .verlist div{display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--line);font-size:14px}
+  .verlist div:last-child{border-bottom:0}
+  .verlist small{color:var(--mute)}
+  .dim{opacity:.55}
+</style>
+</head>
+<body>
+<header class="gh">
+  <h1>DM automations · Screen gallery</h1>
+  <p>Static states of the comment-triggered automation feature inside Blotato's Developer Platform. Data is illustrative. Each card is one page state. Diagnostics (gateway mode, clock) are shown once, as a floating pill that hides without changing the page.</p>
+  <input type="search" placeholder="Find a screen… (e.g. runs, bluesky, draft, expired)" oninput="document.querySelectorAll('.gc').forEach(s=>s.hidden=!s.dataset.label.includes(this.value.toLowerCase()))">
+  <nav>
+    <a href="#overview">Overview</a><a href="#new">New automation</a><a href="#editor">Editor</a><a href="#platforms">Editor per platform</a><a href="#states">Editor states</a><a href="#runs">Runs</a><a href="#analytics">Analytics</a><a href="#accounts">Accounts</a><a href="#system">System states</a>
+  </nav>
+</header>
+<main class="gm" id="gallery"></main>
+
+<script>
+const NAV = ['Overview','Calendar','Analytics','Posts','Logs','Videos','Inbox','DM automations','Accounts','Tools','Settings'];
+const ICON = {"Overview": "<path d=\"M3 12a9 9 0 0 1 18 0\"/><path d=\"M12 12l4-4\"/>", "Calendar": "<rect x=\"3\" y=\"5\" width=\"18\" height=\"16\" rx=\"2\"/><path d=\"M3 10h18M8 3v4M16 3v4\"/>", "Analytics": "<path d=\"M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z\"/><circle cx=\"12\" cy=\"12\" r=\"3\"/>", "Posts": "<path d=\"M6 3h8l4 4v14H6z\"/><path d=\"M14 3v4h4M9 13h6M9 17h6\"/>", "Logs": "<path d=\"M4 6c4 0 4 12 8 12s4-12 8-12\"/>", "Videos": "<rect x=\"3\" y=\"7\" width=\"13\" height=\"10\" rx=\"2\"/><path d=\"M16 11l5-3v8l-5-3z\"/>", "Inbox": "<path d=\"M3 13l2-8h14l2 8v6H3z\"/><path d=\"M3 13h5l2 3h4l2-3h5\"/>", "DM automations": "<path d=\"M4 5h16v11H9l-5 4z\"/><path d=\"M8 9h8M8 12h5\"/>", "Accounts": "<circle cx=\"9\" cy=\"8\" r=\"3\"/><circle cx=\"17\" cy=\"9\" r=\"2.5\"/><path d=\"M3 20c0-3 3-5 6-5s6 2 6 5M15 20c0-2 2-4 4-4\"/>", "Tools": "<path d=\"M9 3h6M10 3v6l-5 9a2 2 0 0 0 2 3h10a2 2 0 0 0 2-3l-5-9V3\"/>", "Settings": "<circle cx=\"12\" cy=\"12\" r=\"3\"/><path d=\"M19 12a7 7 0 0 0-.1-1.2l2-1.5-2-3.4-2.3 1a7 7 0 0 0-2-1.2L14 3h-4l-.6 2.7a7 7 0 0 0-2 1.2l-2.3-1-2 3.4 2 1.5A7 7 0 0 0 5 12c0 .4 0 .8.1 1.2l-2 1.5 2 3.4 2.3-1a7 7 0 0 0 2 1.2L10 21h4l.6-2.7a7 7 0 0 0 2-1.2l2.3 1 2-3.4-2-1.5c.1-.4.1-.8.1-1.2z\"/>"};
+const ico = n => `<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${ICON[n]||''}</svg>`;
+const P = {
+  ig:{k:'ig',l:'IG',name:'Instagram',acct:'@oqtastore',cls:'A'},
+  fb:{k:'fb',l:'f',name:'Facebook Page',acct:'Oqtastore',cls:'A'},
+  th:{k:'th',l:'@',name:'Threads',acct:'@oqtastore',cls:'C'},
+  x:{k:'x',l:'X',name:'X',acct:'@oqtastore',cls:'B'},
+  bs:{k:'bs',l:'bs',name:'Bluesky',acct:'@oqtastore.bsky.social',cls:'B'},
+  yt:{k:'yt',l:'▶',name:'YouTube',acct:'Oqtastore',cls:'C'},
+  li:{k:'li',l:'in',name:'LinkedIn Page',acct:'Oqtastore',cls:'C'},
+  wa:{k:'wa',l:'W',name:'WhatsApp Business',acct:'+40 784 …',cls:'E'},
+  tt:{k:'tt',l:'TT',name:'TikTok Business',acct:'@oqtastore',cls:'E'},
+  pi:{k:'pi',l:'P',name:'Pinterest',acct:'oqtastore',cls:'D'},
+};
+const plat = (p, text) => `<span class="plat ${p.k}"><i>${p.l}</i>${text ?? p.acct}</span>`;
+
+function frame({active='DM automations', body, overlay='', note=''}) {
+  return `<div class="app">
+    <aside class="side">
+      <div class="brand"><div class="logo">🥔</div><div><b>Blotato</b><small>Developer Platform</small></div></div>
+      <div class="switch"><span>✦ Switch to Content Studio</span><span>↗</span></div>
+      <div class="navsec">Platform</div>
+      <div class="nav">${NAV.map(n=>`<a class="${n===active?'on':''}">${ico(n)}${n}${n==='Tools'?'<span class="chev">›</span>':''}</a>`).join('')}</div>
+    </aside>
+    <div class="main">${body}</div>
+    ${overlay}
+  </div>${note?`<div class="gs-note">${note}</div>`:''}`;
+}
+const header = (title, sub, actions='') => `<div class="ph"><div><h1>${title}</h1><div class="sub">${sub}</div></div><div class="row">${actions}</div></div>`;
+const crumbs = (name) => `<div class="crumbs"><a>DM automations</a> / ${name}</div>`;
+const tabs = (on) => `<div class="tabs">${['Editor','Runs','Analytics'].map(t=>`<span class="${t===on?'on':''}">${t}</span>`).join('')}</div>`;
+
+const LIST_ROWS = [
+  ['Pricing lead capture', plat(P.ig), 'Comment · pricing, price, how much', '<span class="pill ok">Live</span>', '38','29','1','2 min ago'],
+  ['Free guide on GUIDE', plat(P.fb), 'Comment · guide', '<span class="pill ok">Live</span>', '12','12','0','1 h ago'],
+  ['Thank every commenter', plat(P.yt), 'Comment · any', '<span class="pill ok">Live</span>', '140','140','0','4 min ago'],
+  ['Bluesky pricing', plat(P.bs), 'Comment · pricing', '<span class="pill">Draft</span>', '—','—','—','—'],
+  ['Catalog on request', plat(P.wa), 'Message · catalog', '<span class="pill ok">Live</span>', '7','7','0','20 min ago'],
+  ['Launch day replies', plat(P.th), 'Comment · launch', '<span class="pill warn">Paused</span>', '0','—','—','yesterday'],
+];
+const listTable = (rows) => `<div class="tbl"><table><thead><tr><th>Automation</th><th>Account</th><th>Trigger</th><th>State</th><th>Runs 24h</th><th>Success</th><th>Failed</th><th>Last run</th><th></th></tr></thead><tbody>${rows.map(r=>`<tr><td><b>${r[0]}</b></td><td>${r[1]}</td><td class="mono">${r[2]}</td><td>${r[3]}</td><td>${r[4]}</td><td>${r[5]}</td><td>${r[6]==='1'?'<span style="color:#b91c1c">1</span>':r[6]}</td><td class="mono">${r[7]}</td><td style="color:#9ca3af">⋯</td></tr>`).join('')}</tbody></table></div>`;
+
+/* ---------- editor pieces ---------- */
+const stepReply = (n, text='Sent you a DM! 📩') => `<div class="step"><div class="t"><span><span class="n">${n}</span><b>Reply to the comment</b></span><span class="act">⋮</span></div><div class="msg">${text}</div></div>`;
+const stepDM = (n, title, text, buttons=[], extra='') => `<div class="step"><div class="t"><span><span class="n">${n}</span><b>${title}</b></span><span class="act">⋮</span></div><div class="msg">${text}</div>${buttons.map(b=>`<span class="btnlike">${b}</span>`).join('')}${extra}</div>`;
+const stepWait = (n, what='an email address', hours='72') => `<div class="step"><div class="t"><span><span class="n">${n}</span><b>Wait for ${what}</b></span><span class="act">⋮</span></div><div class="row" style="gap:16px;flex-wrap:wrap"><div class="field" style="margin:0"><label style="font-weight:500;font-size:13px">Give up after</label><span class="select" style="width:160px">${hours} hours <span>▾</span></span></div><div class="field" style="margin:0"><label style="font-weight:500;font-size:13px">If the reply has no email</label><span class="select" style="width:260px">Ask once more, then keep waiting <span>▾</span></span></div></div></div>`;
+const stepHook = (n, url='https://hooks.oqtastore.example/leads') => `<div class="step"><div class="t"><span><span class="n">${n}</span><b>Send to a webhook</b></span><span class="act">⋮</span></div><div class="row"><span class="seg"><span class="on">POST</span><span>GET</span><span>PUT</span></span><span class="input" style="max-width:420px">${url}</span></div><div class="meta">Sends the contact, the captured email and the automation name as JSON. <a style="color:var(--nav-on)">Add a header</a></div></div>`;
+const fallbackRow = (choice='Reply to the comment instead') => `<div class="meta" style="margin-top:12px"><span style="display:inline-block;width:220px">If this person can't receive messages</span> <span class="select" style="display:inline-flex;width:300px">${choice} <span>▾</span></span></div>`;
+const addStep = (open=false, items=[]) => `<div style="position:relative"><div class="addstep">+ Add step</div>${open?`<div class="menu">${items.map(i=>`<div class="${i[2]?'hov':''}"><b>${i[0]}</b><small>${i[1]}</small></div>`).join('')}</div>`:''}</div>`;
+const con = () => `<div class="connector"></div>`;
+
+function trigger({p, kinds=['comments'], which='any', keywords=['pricing','price','how much'], msgKinds=false, allowComments=true, allowDM=true, postLabel='any post or reel', anyText=false}) {
+  const kw = anyText ? `<div class="kw"><span class="kwph">Any comment</span></div>` : `<div class="kw">${keywords.map(k=>`<span>${k}</span>`).join('')}<span class="kwph">Type a word and press Enter</span></div>`;
+  return `<div class="card"><h3>When someone…</h3>
+    <div class="row" style="gap:18px;margin-bottom:14px;flex-wrap:wrap">
+      ${allowComments?`<span class="chk"><i class="${kinds.includes('comments')?'on':''}">${kinds.includes('comments')?'✓':''}</i>comments</span>`:''}
+      ${allowDM?`<span class="chk"><i class="${kinds.includes('dm')?'on':''}">${kinds.includes('dm')?'✓':''}</i>sends a message</span>`:''}
+    </div>
+    ${allowComments&&kinds.includes('comments')?`<div class="field"><label>On</label><span class="seg"><span class="${which==='any'?'on':''}">Any post</span><span class="${which==='specific'?'on':''}">A specific post</span><span class="${which==='next'?'on':''}">My next post</span></span>${which==='specific'?`<div class="select" style="margin-top:10px">🖼 "New autumn collection is live…" · reel · Oct 3 <span>Change</span></div>`:''}</div>`:''}
+    <div class="field"><label>${kinds.includes('comments')&&kinds.includes('dm')?'And the comment or message contains':kinds.includes('dm')?'And the message contains':'And the comment contains'}</label>${kw}<div class="hint" style="margin-top:6px">Matches whole words, any letter case. Leave empty to match everything.</div></div>
+  </div>`;
+}
+const editorHead = (name, p, state='Draft', actions) => `${crumbs(name)}<div class="ph"><div><div class="row"><h1 style="font-size:26px">${name}</h1>${state==='Live'?'<span class="pill ok">Live</span>':state==='Paused'?'<span class="pill warn">Paused</span>':'<span class="pill">Draft</span>'}</div><div class="sub">${plat(p)}</div></div><div class="row">${actions ?? (state==='Live'?'<span class="btn ghost">Move to draft</span><span class="btn sec">Save</span><span class="btn">Save and publish</span>':'<span class="btn sec">Save draft</span><span class="btn">Publish</span>')}</div></div>${tabs('Editor')}`;
+
+/* full Instagram flow (the brief) */
+const IG_STEPS = (opts={}) => `<div class="card"><h3>Then…</h3><div class="steps">
+  ${stepReply(1)}${con()}
+  ${stepDM(2,'Send a message','Hey! Reply with your email and I’ll send you the pricing sheet.')}${con()}
+  ${stepWait(3)}${con()}
+  ${stepDM(4,'Send a message','Thanks! Here it is 👇',['Open pricing sheet'],'<div class="meta">Button opens https://oqtastore.example/pricing?e={{email}}</div>')}${con()}
+  ${stepHook(5)}
+  ${opts.noAdd?'':con()+addStep(opts.menuOpen, opts.menuItems||[])}
+</div></div>`;
+
+/* ---------- cards ---------- */
+const cards = [];
+const add = (id, group, title, html, label='') => cards.push({id, group, title, html, label:(group+' · '+title+' '+label).toLowerCase()});
+
+/* OVERVIEW */
+add('overview','DM automations','Empty state', frame({body: header('DM automations','0 automations · 0 runs in the last 24 hours · 0 failed','<span class="btn">+ New automation</span>') + `<div class="empty"><h3>No automations yet</h3><p>Create your first automation to start responding automatically.</p><span class="btn">+ New automation</span></div>`}), 'first run');
+add('overview-list','DM automations','Overview with automations', frame({body: header('DM automations','6 automations · 197 runs in the last 24 hours · 1 failed','<span class="btn sec">All accounts ▾</span><span class="btn">+ New automation</span>') + listTable(LIST_ROWS)}), 'list live draft paused');
+add('overview-filter','DM automations','Overview filtered by account', frame({body: header('DM automations','1 automation on @oqtastore · 38 runs in the last 24 hours · 1 failed','<span class="btn sec">'+plat(P.ig)+' ▾</span><span class="btn">+ New automation</span>') + listTable(LIST_ROWS.slice(0,1))}), 'filter instagram');
+add('overview-failing','DM automations','Overview with a disconnected account', frame({body: header('DM automations','6 automations · 197 runs in the last 24 hours · 9 failed','<span class="btn sec">All accounts ▾</span><span class="btn">+ New automation</span>') + `<div class="callout warn" style="margin-bottom:16px"><b>Oqtastore (Facebook Page) is disconnected</b>Runs for "Free guide on GUIDE" have failed since 09:12. <a style="color:#c2410c;text-decoration:underline">Reconnect the account</a> to resume.</div>` + listTable(LIST_ROWS.map((r,i)=> i===1 ? [r[0], r[1], r[2], '<span class="pill bad">Account disconnected</span>', '9','0','<span style="color:#b91c1c">9</span>','09:12'] : r))}), 'error disconnected reconnect');
+add('overview-search','DM automations','Overview, search with no match', frame({body: header('DM automations','6 automations','<span class="btn sec">All accounts ▾</span><span class="btn">+ New automation</span>') + `<div class="field"><span class="input" style="max-width:360px">webinar</span></div><div class="empty"><h3>Nothing matches "webinar"</h3><p>Check the spelling or clear the search.</p><span class="btn sec">Clear search</span></div>`}), 'search empty');
+add('overview-loading','DM automations','Overview loading', frame({body: header('DM automations','&nbsp;','<span class="btn">+ New automation</span>') + `<div class="tbl" style="padding:16px">${[1,2,3,4].map(()=>'<div class="skel" style="width:'+(60+Math.random()*30)+'%"></div>').join('')}</div>`}), 'skeleton');
+
+/* NEW AUTOMATION MODAL */
+const modalNew = (inner, foot) => `<div class="modal-bg"><div class="modal"><h3>New automation</h3><p>Name it and choose the account it runs on. The account can’t be changed later.</p>${inner}<div class="foot">${foot}</div></div></div>`;
+const bodyList = header('DM automations','6 automations · 197 runs in the last 24 hours · 1 failed','<span class="btn sec">All accounts ▾</span><span class="btn">+ New automation</span>') + listTable(LIST_ROWS);
+add('new','New automation','Choose account', frame({body: bodyList, overlay: modalNew(`<div class="field"><label>Account</label><div class="select open">Select a connected account <span>▾</span></div><div class="opts">
+  <div class="hov">${plat(P.ig)}<small>Instagram</small></div>
+  <div>${plat(P.fb)}<small>Facebook Page</small></div>
+  <div>${plat(P.th)}<small>Threads</small></div>
+  <div>${plat(P.x)}<small>X</small></div>
+  <div>${plat(P.bs)}<small>Bluesky</small></div>
+  <div>${plat(P.yt)}<small>YouTube</small></div>
+  <div>${plat(P.li)}<small>LinkedIn Page</small></div>
+  <div>${plat(P.wa)}<small>WhatsApp Business</small></div>
+  <div>${plat(P.tt)}<small>TikTok Business</small></div>
+  <div class="dis">${plat(P.pi)}<small>No comment or message automations on Pinterest</small></div>
+</div></div><div class="field"><label>Name</label><span class="input">Pricing lead capture</span></div>`, '<span class="btn sec">Cancel</span><span class="btn">Create</span>')}), 'modal account picker all platforms');
+add('new-noaccounts','New automation','No supported accounts connected', frame({body: bodyList, overlay: modalNew(`<div class="callout info"><b>Connect an account first</b>Automations run on Instagram, Facebook Pages, Threads, X, Bluesky, YouTube, LinkedIn Pages, WhatsApp Business and TikTok Business accounts. None is connected yet.</div>`, '<span class="btn sec">Cancel</span><span class="btn">Go to Accounts</span>')}), 'modal empty');
+add('new-disconnected','New automation','Chosen account is disconnected', frame({body: bodyList, overlay: modalNew(`<div class="field"><label>Account</label><div class="select">${plat(P.fb)} <span>▾</span></div><div class="errtext">This account is disconnected. Reconnect it on the Accounts page before creating an automation.</div></div><div class="field"><label>Name</label><span class="input">Free guide on GUIDE</span></div>`, '<span class="btn sec">Cancel</span><span class="btn dis">Create</span>')}), 'modal error');
+
+/* EDITOR (Instagram, canonical) */
+add('editor','Editor','Instagram · new draft (empty)', frame({body: editorHead('Pricing lead capture', P.ig, 'Draft') + trigger({p:P.ig, keywords:[], which:'any'}) + `<div class="card"><h3>Then…</h3><div class="steps">${stepReply(1,'')}${con()}${addStep(false)}</div></div>`}), 'instagram empty');
+add('editor-full','Editor','Instagram · the brief’s flow, draft', frame({body: editorHead('Pricing lead capture', P.ig, 'Draft') + trigger({p:P.ig}) + IG_STEPS()}), 'instagram comment reply dm email link webhook');
+add('editor-addstep','Editor','Instagram · Add step menu open', frame({body: editorHead('Pricing lead capture', P.ig, 'Draft') + trigger({p:P.ig}) + IG_STEPS({menuOpen:true, menuItems:[['Send a message','Direct message with text and up to 3 buttons',true],['Ask them to follow','Holds the next message until they follow you'],['Wait for a reply','Continue when they answer, optionally capture an email'],['Send to a webhook','Post what was collected to your CRM']]})}), 'instagram menu options');
+add('editor-specific','Editor','Instagram · specific post, comments and messages', frame({body: editorHead('Pricing lead capture', P.ig, 'Draft') + trigger({p:P.ig, kinds:['comments','dm'], which:'specific'}) + IG_STEPS({noAdd:true})}), 'instagram post picker both triggers');
+add('editor-live','Editor','Instagram · live, editing', frame({body: editorHead('Pricing lead capture', P.ig, 'Live') + `<div class="callout info" style="margin-bottom:16px"><b>This automation is live</b>Changes apply to new runs after you save and publish. Runs already in progress finish with the version they started on.</div>` + trigger({p:P.ig}) + IG_STEPS({noAdd:true})}), 'instagram live version');
+
+/* EDITOR PER PLATFORM */
+add('platforms','Editor per platform','Facebook Page', frame({body: editorHead('Free guide on GUIDE', P.fb, 'Live') + trigger({p:P.fb, keywords:['guide']}) + `<div class="card"><h3>Then…</h3><div class="steps">${stepReply(1,'Check your inbox 📬')}${con()}${stepDM(2,'Send a message','Here’s the free guide you asked for.',['Download the guide'])}${con()}${addStep(false)}</div></div>`}), 'facebook messenger');
+add('plat-threads','Editor per platform','Threads (replies only)', frame({body: editorHead('Launch day replies', P.th, 'Paused') + trigger({p:P.th, keywords:['launch'], allowDM:false}) + `<div class="card"><h3>Then…</h3><div class="steps">${stepReply(1,'Thanks! Full details are in the pinned post 📌')}${con()}${addStep(true,[['Reply to the comment','Public reply in the thread',true],['Send to a webhook','Post the comment and author to your CRM']])}</div></div>`, note:'Threads has no messaging API, so the constructor offers replies and webhooks only. Nothing is marked as "not allowed"; it simply is not offered.'}), 'threads reply only');
+add('plat-x','Editor per platform','X (DM may be refused)', frame({body: editorHead('Pricing on X', P.x, 'Draft') + trigger({p:P.x, keywords:['pricing']}) + `<div class="card"><h3>Then…</h3><div class="steps">${stepReply(1,'DM sent 📩')}${con()}${stepDM(2,'Send a message','Hey! Here’s the pricing sheet: https://oqtastore.example/pricing',[],fallbackRow('Reply to the comment instead'))}${con()}${addStep(false)}</div></div>`, note:'On X and Bluesky a person can block messages from accounts they don’t follow. The message step therefore carries one setting: what to do when the person can’t receive it. Options: reply to the comment instead, skip the step, or stop the run.'}), 'x twitter fallback');
+add('plat-bluesky','Editor per platform','Bluesky', frame({body: editorHead('Bluesky pricing', P.bs, 'Draft') + trigger({p:P.bs, keywords:['pricing']}) + `<div class="card"><h3>Then…</h3><div class="steps">${stepReply(1,'Sent you a DM!')}${con()}${stepDM(2,'Send a message','Reply with your email and I’ll send the pricing sheet.',[],fallbackRow('Skip this step'))}${con()}${stepWait(3)}${con()}${stepDM(4,'Send a message','Thanks! https://oqtastore.example/pricing?e={{email}}',[],fallbackRow('Stop the run'))}${con()}${addStep(false)}</div></div>`}), 'bluesky fallback');
+add('plat-youtube','Editor per platform','YouTube (replies only)', frame({body: editorHead('Thank every commenter', P.yt, 'Live') + trigger({p:P.yt, keywords:[], anyText:true, allowDM:false, postLabel:'any video'}) + `<div class="card"><h3>Then…</h3><div class="steps">${stepReply(1,'Thanks for watching! New video every Tuesday 🎬')}${con()}${addStep(false)}</div></div>`, note:'YouTube replies arrive a few minutes after the comment because YouTube offers no push notification for comments.'}), 'youtube reply only polling');
+add('plat-linkedin','Editor per platform','LinkedIn Page (replies only)', frame({body: editorHead('Whitepaper replies', P.li, 'Draft') + trigger({p:P.li, keywords:['whitepaper'], allowDM:false}) + `<div class="card"><h3>Then…</h3><div class="steps">${stepReply(1,'Thanks! The whitepaper is at oqtastore.example/whitepaper')}${con()}${stepHook(2,'https://hooks.oqtastore.example/linkedin-leads')}${con()}${addStep(false)}</div></div>`}), 'linkedin page');
+add('plat-whatsapp','Editor per platform','WhatsApp Business (messages only)', frame({body: editorHead('Catalog on request', P.wa, 'Live') + trigger({p:P.wa, kinds:['dm'], keywords:['catalog','catalogue'], allowComments:false}) + `<div class="card"><h3>Then…</h3><div class="steps">${stepDM(1,'Send a message','Here’s our autumn catalog 👇',['Open catalog'])}${con()}${stepWait(2,'a reply','24')}${con()}${stepDM(3,'Send a message','Want me to reserve something? Reply with the item name.')}${con()}${addStep(false)}</div></div>`, note:'WhatsApp has no posts or comments, so the trigger card shows only "sends a message".'}), 'whatsapp message trigger');
+add('plat-tiktok','Editor per platform','TikTok Business (messages only)', frame({body: editorHead('TikTok inbox replies', P.tt, 'Draft') + trigger({p:P.tt, kinds:['dm'], keywords:['price'], allowComments:false}) + `<div class="card"><h3>Then…</h3><div class="steps">${stepDM(1,'Send a message','Prices start at $29. Want the full list?',['See all prices'])}${con()}${addStep(false)}</div></div>`}), 'tiktok business messaging');
+add('plat-pinterest','Editor per platform','Pinterest (not available)', frame({body: header('DM automations','6 automations','<span class="btn">+ New automation</span>') + `<div class="callout info"><b>Pinterest doesn’t support comment or message automations</b>Pinterest’s API exposes pins and boards but no comments and no messages. Connect Pinterest for publishing and analytics; automations are available on the other nine networks.</div>`}), 'pinterest unsupported');
+
+/* EDITOR STATES */
+add('states','Editor states','Validation: empty message', frame({body: editorHead('Pricing lead capture', P.ig, 'Draft') + trigger({p:P.ig}) + `<div class="card"><h3>Then…</h3><div class="steps">${stepReply(1)}${con()}<div class="step" style="border-color:#dc2626"><div class="t"><span><span class="n">2</span><b>Send a message</b></span><span class="act">⋮</span></div><div class="input ta err" style="max-width:560px"></div><div class="errtext">Write the message to send.</div></div>${con()}${addStep(false)}</div></div>`}), 'error required');
+add('state-toolong','Editor states','Validation: message too long', frame({body: editorHead('Pricing lead capture', P.ig, 'Draft') + trigger({p:P.ig}) + `<div class="card"><h3>Then…</h3><div class="steps">${stepReply(1)}${con()}<div class="step" style="border-color:#dc2626"><div class="t"><span><span class="n">2</span><b>Send a message</b></span><span class="act">⋮</span></div><div class="input ta err" style="max-width:560px">Hey! Thanks so much for your interest in our autumn collection. We’ve put together a complete pricing sheet with every item, sizes, colours, bundle discounts, shipping options for the EU, UK and US, and our return policy. Reply with your email and I’ll send it over right away, plus a 10% code… (continues)</div><div class="counter" style="color:#b91c1c">1,042 / 1,000 characters</div></div>${con()}${addStep(false)}</div></div>`}), 'error limit');
+add('state-nokeyword','Editor states','Validation: keyword needed when a specific post is not chosen', frame({body: editorHead('Pricing lead capture', P.ig, 'Draft') + `<div class="card"><h3>When someone…</h3><div class="row" style="gap:18px;margin-bottom:14px"><span class="chk"><i class="on">✓</i>comments</span><span class="chk"><i></i>sends a message</span></div><div class="field"><label>On</label><span class="seg"><span class="on">Any post</span><span>A specific post</span><span>My next post</span></span></div><div class="field"><label>And the comment contains</label><div class="kw" style="border-color:#dc2626"><span class="kwph">Type a word and press Enter</span></div><div class="errtext">Add at least one keyword, or choose a specific post to reply to every comment on it.</div></div></div>` + IG_STEPS({noAdd:true})}), 'error keyword');
+add('state-unsaved','Editor states','Unsaved changes on leave', frame({body: editorHead('Pricing lead capture', P.ig, 'Live') + trigger({p:P.ig}) + IG_STEPS({noAdd:true}), overlay: `<div class="modal-bg"><div class="modal"><h3>Leave without saving?</h3><p>Your changes to "Pricing lead capture" will be lost.</p><div class="foot"><span class="btn sec">Keep editing</span><span class="btn danger">Leave</span></div></div></div>`}), 'confirm');
+add('state-publish','Editor states','Publish confirmation', frame({body: editorHead('Pricing lead capture', P.ig, 'Draft') + trigger({p:P.ig}) + IG_STEPS({noAdd:true}), overlay: `<div class="modal-bg"><div class="modal"><h3>Publish "Pricing lead capture"?</h3><p>It will start answering comments on any post of ${P.ig.acct} that contain <b>pricing</b>, <b>price</b> or <b>how much</b>.</p><div class="callout info">Test it from another account: your own comments never trigger an automation.</div><div class="foot"><span class="btn sec">Cancel</span><span class="btn">Publish</span></div></div></div>`}), 'modal');
+add('state-published','Editor states','Published', frame({body: editorHead('Pricing lead capture', P.ig, 'Live') + trigger({p:P.ig}) + IG_STEPS({noAdd:true}), overlay: `<div class="toast ok">✓ Published. Version 3 is live.</div>`}), 'toast success');
+add('state-draft','Editor states','Move to draft confirmation', frame({body: editorHead('Pricing lead capture', P.ig, 'Live') + trigger({p:P.ig}) + IG_STEPS({noAdd:true}), overlay: `<div class="modal-bg"><div class="modal"><h3>Move to draft?</h3><p>It stops answering new comments and messages. 5 runs already waiting for a reply will finish.</p><div class="foot"><span class="btn sec">Cancel</span><span class="btn">Move to draft</span></div></div></div>`}), 'pause');
+add('state-trigger-off','Editor states','One trigger paused on a live automation', frame({body: editorHead('Pricing lead capture', P.ig, 'Live') + `<div class="card"><h3>When someone…</h3><div class="row" style="gap:28px;margin-bottom:14px"><span class="row"><span class="tog on"></span> comments</span><span class="row"><span class="tog"></span> sends a message <span class="pill" style="font-size:12px">paused</span></span></div><div class="field"><label>On</label><span class="seg"><span class="on">Any post</span><span>A specific post</span><span>My next post</span></span></div><div class="field"><label>And the comment contains</label><div class="kw"><span>pricing</span><span>price</span><span>how much</span></div></div></div>` + IG_STEPS({noAdd:true}), note:'On a live automation each trigger has its own switch. Turning one off applies immediately, without republishing.'}), 'toggle');
+add('state-versions','Editor states','Version history', frame({body: editorHead('Pricing lead capture', P.ig, 'Live') + trigger({p:P.ig}) + IG_STEPS({noAdd:true}), overlay: `<div class="drawer"><span class="close">✕</span><h3>Version history</h3><div class="hint">Runs keep the version they started on.</div><div class="verlist" style="margin-top:14px"><div><span><b>v3</b> · current <small>· 2 runs in progress</small></span><small>Oct 4, 10:00</small></div><div><span><b>v2</b> <small>· added the webhook step · 3 runs in progress</small></span><small>Sep 30, 14:22</small></div><div><span><b>v1</b> <small>· first published</small></span><small>Sep 12, 09:05</small></div></div><div style="margin-top:16px"><span class="btn sec sm">Restore v2 as a draft</span></div></div>`}), 'drawer');
+add('state-archive','Editor states','Archive confirmation', frame({body: editorHead('Launch day replies', P.th, 'Paused') + trigger({p:P.th, keywords:['launch'], allowDM:false}), overlay: `<div class="modal-bg"><div class="modal"><h3>Archive "Launch day replies"?</h3><p>It disappears from the list and stops for good. Its runs and analytics stay readable.</p><div class="foot"><span class="btn sec">Cancel</span><span class="btn danger">Archive</span></div></div></div>`}), 'delete');
+add('state-duplicate','Editor states','Duplicate to another account', frame({body: editorHead('Pricing lead capture', P.ig, 'Live') + trigger({p:P.ig}) + IG_STEPS({noAdd:true}), overlay: `<div class="modal-bg"><div class="modal"><h3>Duplicate to another account</h3><p>Steps the other network doesn’t support are left out of the copy.</p><div class="field"><label>Account</label><div class="select">${plat(P.yt)} <span>▾</span></div></div><div class="callout info">YouTube copy will keep step 1 (reply to the comment) and step 5 (webhook). Messaging steps are left out.</div><div class="foot"><span class="btn sec">Cancel</span><span class="btn">Create draft</span></div></div></div>`}), 'copy');
+add('state-saving','Editor states','Saving', frame({body: editorHead('Pricing lead capture', P.ig, 'Draft', '<span class="btn sec dis">Saving…</span><span class="btn dis">Publish</span>') + trigger({p:P.ig}) + IG_STEPS({noAdd:true})}), 'loading');
+add('state-savefail','Editor states','Save failed', frame({body: editorHead('Pricing lead capture', P.ig, 'Draft') + trigger({p:P.ig}) + IG_STEPS({noAdd:true}), overlay: `<div class="toast bad">Couldn’t save. Check your connection and try again.</div>`}), 'error');
+
+/* RUNS */
+const runRows = [
+  ['@jane.doe','Oct 4, 10:00','<span class="pill ok">Completed</span>','5 of 5','v3'],
+  ['@maria.k','Oct 4, 09:58','<span class="pill wait">Waiting for a reply</span>','3 of 5 · gives up Oct 7','v3'],
+  ['@spammy_sam','Oct 4, 09:42','<span class="pill">Superseded</span>','2 of 5 · commented again','v3'],
+  ['@bob','Oct 4, 09:41','<span class="pill bad">Failed</span>','2 of 5 · messaging window closed','v2'],
+  ['@desktop_dan','Oct 1, 08:00','<span class="pill">Expired</span>','3 of 5 · no reply in 72 h','v2'],
+  ['@alex.r','Oct 4, 10:01','<span class="pill info">Running</span>','1 of 5','v3'],
+];
+const runsTable = (rows) => `<div class="tbl"><table><thead><tr><th>Person</th><th>Started</th><th>Status</th><th>Progress</th><th>Version</th><th></th></tr></thead><tbody>${rows.map(r=>`<tr><td><b>${r[0]}</b></td><td class="mono">${r[1]}</td><td>${r[2]}</td><td>${r[3]}</td><td class="mono">${r[4]}</td><td style="color:#9ca3af">›</td></tr>`).join('')}</tbody></table></div>`;
+const runsHead = () => `${crumbs('Pricing lead capture')}<div class="ph"><div><div class="row"><h1 style="font-size:26px">Pricing lead capture</h1><span class="pill ok">Live</span></div><div class="sub">${plat(P.ig)}</div></div><div class="row"><span class="btn ghost">Move to draft</span><span class="btn sec">Edit</span></div></div>${tabs('Runs')}`;
+const runFilters = (on='All') => `<div class="row" style="margin-bottom:14px;gap:6px">${['All','Running','Waiting','Completed','Failed','Expired','Superseded'].map(f=>`<span class="pill ${f===on?'info':''}" style="font-weight:500">${f}</span>`).join('')}<span style="flex:1"></span><span class="input" style="max-width:220px;padding:7px 10px;font-size:13px;color:#9ca3af">Search by person</span></div>`;
+add('runs','Runs','Runs list, all statuses', frame({body: runsHead() + runFilters() + runsTable(runRows)}), 'completed waiting failed expired superseded running');
+add('runs-empty','Runs','Runs empty (just published)', frame({body: runsHead() + runFilters() + `<div class="empty"><h3>No runs yet</h3><p>Runs appear here the moment someone comments "pricing", "price" or "how much" on a post of ${P.ig.acct}.</p><span class="btn sec">How to test it</span></div>`}), 'empty');
+add('runs-failed','Runs','Runs filtered: failed', frame({body: runsHead() + runFilters('Failed') + runsTable(runRows.filter(r=>r[2].includes('Failed')))}), 'filter');
+const drawerRun = (title, status, kv, timeline, foot='') => `<div class="drawer"><span class="close">✕</span><h3>${title}</h3><div class="row" style="margin-top:6px">${status}</div><div class="kv">${kv}</div><ul class="tl">${timeline}</ul>${foot}</div>`;
+add('run-completed','Runs','Run detail: completed', frame({body: runsHead() + runFilters() + runsTable(runRows), overlay: drawerRun('@jane.doe','<span class="pill ok">Completed</span><span class="hint">v3 · 1 min 2 s</span>','<span>Started by</span><span>Comment "pricing please!" on "New autumn collection…"</span><span>Email captured</span><span>jane@example.com</span><span>Conversation</span><span><a style="color:var(--nav-on)">Open in Inbox</a></span>', `<li class="ok"><time>10:00:02</time>Replied to the comment</li><li class="ok"><time>10:00:03</time>Sent the message asking for an email</li><li class="ok"><time>10:00:58</time>Reply received with an email</li><li class="ok"><time>10:00:59</time>Sent the pricing link</li><li class="ok"><time>10:01:04</time>Webhook delivered (200)</li>`)}), 'detail success');
+add('run-waiting','Runs','Run detail: waiting for a reply', frame({body: runsHead() + runFilters() + runsTable(runRows), overlay: drawerRun('@maria.k','<span class="pill wait">Waiting for a reply</span><span class="hint">v3 · gives up Oct 7, 09:58</span>','<span>Started by</span><span>Comment "price?" on "New autumn collection…"</span><span>Waiting for</span><span>a reply with an email address</span>', `<li class="ok"><time>09:58:10</time>Replied to the comment</li><li class="ok"><time>09:58:11</time>Sent the message asking for an email</li><li class="wait"><time>now</time>Waiting for a reply · 71 h 50 min left</li><li class="mute"><time></time>Send the pricing link</li><li class="mute"><time></time>Webhook</li>`, '<div style="margin-top:16px" class="row"><span class="btn sec sm">Open conversation</span><span class="btn ghost sm">Stop this run</span></div>')}), 'detail pending');
+add('run-failed','Runs','Run detail: failed', frame({body: runsHead() + runFilters() + runsTable(runRows), overlay: drawerRun('@bob','<span class="pill bad">Failed</span><span class="hint">v2</span>','<span>Started by</span><span>Comment "pricing?" on "Behind the scenes…"</span><span>Failed at</span><span>Step 4 · Send the pricing link</span>', `<li class="ok"><time>09:41:00</time>Replied to the comment</li><li class="ok"><time>09:41:01</time>Sent the message asking for an email</li><li class="ok"><time>Oct 3, 11:20</time>Reply received with an email</li><li class="bad"><time>09:41:30</time>Couldn’t send: the 24-hour messaging window closed before this step ran</li>`, `<div class="callout warn" style="margin-top:14px"><b>What to do</b>Instagram only lets you message someone within 24 hours of their last message. If @bob writes again, a new run can continue. Nothing is retried automatically.</div>`)}), 'detail error window');
+add('run-expired','Runs','Run detail: expired', frame({body: runsHead() + runFilters() + runsTable(runRows), overlay: drawerRun('@desktop_dan','<span class="pill">Expired</span><span class="hint">v2</span>','<span>Started by</span><span>Comment "how much" on "Behind the scenes…"</span><span>Ended</span><span>No reply within 72 hours</span>', `<li class="ok"><time>Oct 1, 08:00</time>Replied to the comment</li><li class="ok"><time>Oct 1, 08:00</time>Sent the message asking for an email</li><li class="mute"><time>Oct 4, 08:00</time>Gave up waiting · nothing else was sent</li>`)}), 'detail timeout');
+add('run-superseded','Runs','Run detail: superseded', frame({body: runsHead() + runFilters() + runsTable(runRows), overlay: drawerRun('@spammy_sam','<span class="pill">Superseded</span><span class="hint">v3</span>','<span>Started by</span><span>Comment "what’s the price" on "New autumn collection…"</span><span>Replaced by</span><span><a style="color:var(--nav-on)">the run started at 09:42</a> when @spammy_sam commented again</span>', `<li class="ok"><time>09:41:10</time>Replied to the comment</li><li class="ok"><time>09:41:11</time>Sent the message asking for an email</li><li class="mute"><time>09:42:00</time>Stopped: a newer run took over this conversation</li>`)}), 'detail replaced');
+add('run-running','Runs','Run detail: running', frame({body: runsHead() + runFilters() + runsTable(runRows), overlay: drawerRun('@alex.r','<span class="pill info">Running</span><span class="hint">v3</span>','<span>Started by</span><span>Comment "pricing" on "New autumn collection…"</span>', `<li class="ok"><time>10:01:00</time>Replied to the comment</li><li class="wait"><time>10:01:01</time>Sending the message asking for an email…</li><li class="mute"><time></time>Wait for a reply</li><li class="mute"><time></time>Send the pricing link</li><li class="mute"><time></time>Webhook</li>`)}), 'detail in progress');
+add('run-fallback','Runs','Run detail: message refused, fallback used (Bluesky)', frame({body: `${crumbs('Bluesky pricing')}<div class="ph"><div><div class="row"><h1 style="font-size:26px">Bluesky pricing</h1><span class="pill ok">Live</span></div><div class="sub">${plat(P.bs)}</div></div><div class="row"><span class="btn ghost">Move to draft</span><span class="btn sec">Edit</span></div></div>${tabs('Runs')}` + runFilters() + runsTable([['@nora.bsky.social','Oct 4, 11:12','<span class="pill ok">Completed</span>','replied instead of messaging','v1']]), overlay: drawerRun('@nora.bsky.social','<span class="pill ok">Completed</span><span class="hint">v1</span>','<span>Started by</span><span>Reply "pricing" to "Autumn drop is live"</span>', `<li class="ok"><time>11:12:03</time>Replied to the comment</li><li class="ok"><time>11:12:04</time>@nora doesn’t accept messages from accounts she doesn’t follow · replied to the comment instead, as set in step 2</li>`)}), 'bluesky fallback detail');
+
+/* ANALYTICS */
+add('analytics','Analytics','Automation analytics', frame({body: `${crumbs('Pricing lead capture')}<div class="ph"><div><div class="row"><h1 style="font-size:26px">Pricing lead capture</h1><span class="pill ok">Live</span></div><div class="sub">${plat(P.ig)}</div></div><div class="row"><span class="btn sec">Last 7 days ▾</span></div></div>${tabs('Analytics')}<div class="stats"><div class="stat"><b>412</b><span>Started</span></div><div class="stat"><b>371</b><span>Completed · 90%</span></div><div class="stat"><b>298</b><span>Emails captured</span></div><div class="stat"><b>9</b><span>Failed · 3 in the last 7 days</span></div></div><div class="chart">${[30,45,60,55,80,95,70,88,100,76,64,90,85,60].map(h=>`<i style="height:${h}%"></i>`).join('')}</div><div class="hint" style="margin-top:8px">Runs per day. Expired and superseded runs count as started, not as completed or failed.</div>`}), 'stats chart');
+add('analytics-empty','Analytics','Analytics, nothing yet', frame({body: `${crumbs('Bluesky pricing')}<div class="ph"><div><div class="row"><h1 style="font-size:26px">Bluesky pricing</h1><span class="pill">Draft</span></div><div class="sub">${plat(P.bs)}</div></div></div>${tabs('Analytics')}<div class="empty"><h3>No data yet</h3><p>Publish the automation to start collecting numbers.</p></div>`}), 'empty');
+
+/* ACCOUNTS (host page, unchanged shape) */
+add('accounts','Accounts','Accounts list', frame({active:'Accounts', body: header('Accounts','4 connected accounts','<span class="btn">Connect account</span>') + `<div class="tbl"><table><thead><tr><th>Account</th><th>Account ID</th><th>Page ID</th><th>Connected</th><th>Status</th><th></th></tr></thead><tbody>
+  <tr><td>${plat(P.ig,'@oqtastore')}</td><td class="mono">61240 ⧉</td><td class="mono">—</td><td>Oct 3, 2026</td><td><span class="pill ok">Healthy</span></td><td style="color:#9ca3af">⋯</td></tr>
+  <tr><td>${plat(P.fb,'Oqtastore')}<span class="sub">Page connected</span></td><td class="mono">61241 ⧉</td><td class="mono">1049…</td><td>Oct 3, 2026</td><td><span class="pill bad">Reconnect needed</span></td><td style="color:#9ca3af">⋯</td></tr>
+  <tr><td>${plat(P.yt,'Oqtastore')}</td><td class="mono">52175 ⧉</td><td class="mono">—</td><td>Oct 3, 2026</td><td><span class="pill ok">Healthy</span></td><td style="color:#9ca3af">⋯</td></tr>
+  <tr><td>${plat(P.bs,'@oqtastore.bsky.social')}</td><td class="mono">61242 ⧉</td><td class="mono">—</td><td>Oct 4, 2026</td><td><span class="pill ok">Healthy</span></td><td style="color:#9ca3af">⋯</td></tr>
+</table></div><div class="callout warn" style="margin-top:16px"><b>Important</b>Make sure your social accounts are warmed up (active for several weeks with a real posting history) before connecting.</div>`}), 'host page healthy reconnect');
+add('accounts-reconnect','Accounts','Reconnect modal', frame({active:'Accounts', body: header('Accounts','4 connected accounts','<span class="btn">Connect account</span>'), overlay: `<div class="modal-bg"><div class="modal"><h3>Reconnect Oqtastore (Facebook Page)</h3><p>The page’s permission expired on Oct 4 at 09:12. 1 live automation is paused until you reconnect.</p><div class="callout info">You’ll be asked to confirm the same permissions as before: read comments, read and send messages.</div><div class="foot"><span class="btn sec">Cancel</span><span class="btn">Reconnect with Facebook</span></div></div></div>`}), 'modal expired');
+
+/* SYSTEM STATES */
+add('system','System states','Plan doesn’t include automations', frame({body: header('DM automations','Available on every paid plan','') + `<div class="empty"><h3>Start your plan to use automations</h3><p>Automations reply to comments and messages for you. They are included in every paid plan.</p><span class="btn">See plans</span></div>`}), 'billing trial upgrade');
+add('system-gateway','System states','Platform connection unavailable', frame({body: header('DM automations','6 automations · 197 runs in the last 24 hours · 1 failed','<span class="btn sec">All accounts ▾</span><span class="btn">+ New automation</span>') + `<div class="callout bad" style="margin-bottom:16px"><b>We can’t reach the social networks right now</b>New comments and messages are queued and will be processed when the connection is back. Nothing is lost. Started 10:14, we’re on it.</div>` + listTable(LIST_ROWS)}), 'outage banner queued');
+add('system-ratelimit','System states','Rate limit notice on a run', frame({body: runsHead() + runFilters() + runsTable(runRows), overlay: drawerRun('@alex.r','<span class="pill info">Running</span><span class="hint">v3</span>','<span>Started by</span><span>Comment "pricing" on "New autumn collection…"</span>', `<li class="ok"><time>10:01:00</time>Replied to the comment</li><li class="wait"><time>10:01:01</time>Instagram asked us to slow down · retrying in 40 s</li><li class="mute"><time></time>Wait for a reply</li>`)}), 'backoff 429');
+add('system-diag','System states','Diagnostics pill (test environment only, dismissable)', frame({body: header('DM automations','6 automations · 197 runs in the last 24 hours · 1 failed','<span class="btn sec">All accounts ▾</span><span class="btn">+ New automation</span>') + listTable(LIST_ROWS), overlay: `<div class="diag"><em>diag</em> gateway: <b>test stand</b> <em>·</em> clock: 2026-10-04 10:00Z <em>·</em> sha 144d790 <span class="x">✕</span></div>`, note:'Visible only when the service runs in test mode. It floats over the page, uses none of the product’s styles, and the page is complete without it.'}), 'test mode overlay');
+add('system-mobile','System states','Narrow viewport (sidebar collapsed)', `<div class="app" style="grid-template-columns:1fr;max-width:420px;margin:0 auto;border-left:1px solid var(--line);border-right:1px solid var(--line)"><div class="main" style="padding:18px"><div class="row" style="justify-content:space-between;margin-bottom:12px"><span>☰</span><b>DM automations</b><span class="btn sm">+ New</span></div>${listTable(LIST_ROWS.slice(0,3)).replace('<table>','<table style="font-size:13px">')}</div></div>`, 'responsive');
+
+/* render */
+const groups = [...new Set(cards.map(c=>c.group))];
+document.getElementById('gallery').innerHTML = cards.map(c=>`<section class="gc" id="${c.id}" data-label="${c.label}"><header><h2>${c.group.toUpperCase()} · ${c.title}</h2><span>#${c.id}</span></header><div class="gs">${c.html}</div></section>`).join('');
+document.querySelector('.gh p').insertAdjacentHTML('beforeend', ` · ${cards.length} states`);
+</script>
+</body>
+</html>
