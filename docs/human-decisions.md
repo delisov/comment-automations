@@ -367,3 +367,21 @@ Format:
 - Why: A joke that also keeps the real brand out of the deliverable.
 - Affects: docs/mockups, later web package branding
 - Status: active
+
+## HD-040  Merging into main is delegated to the AI for the build
+- When: 2026-10-04T05:55+03:00
+- Who: Dmitriy Elisov
+- Where: Claude Code session, before the overnight build
+- Decision: The AI merges its own pull requests into `main` once the gates are green. "You build it, you break it, you fix it." Supersedes the "may the agent merge: no" slot of the adapter.
+- Why: Ten hours of unattended runs, each depending on the previous one being on main.
+- Affects: process, adapter
+- Status: active
+
+## HD-041  Scope is everything: engine, product UI and test stand; definition of done is an end-to-end demo
+- When: 2026-10-04T05:55+03:00
+- Who: Dmitriy Elisov
+- Where: Claude Code session, before the overnight build
+- Decision: Build the engine, the customer-facing UI (from the gallery) and the test stand with its portal. Done means: open the UI, create an automation on any platform, go to the test stand, emulate a user, comment under a post, and receive the reply, the direct message and the email reminder exactly as the automation was set up. Supersedes AD-004's "no web package".
+- Why: The whole loop must be demonstrable by the human without help.
+- Affects: run plan, packages/web, packages/stand, packages/stand-web, compose stack
+- Status: active
