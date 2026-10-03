@@ -340,3 +340,12 @@ Format:
 - Why: Reply rate is the first signal of whether the opening message works; completion and email capture depend on it.
 - Affects: analytics aggregation (replied count per version), UI stats and comparison table
 - Status: active
+
+## HD-037  "Ask once more" uses its own message, never a repeat of the first one
+- When: 2026-10-04T05:10+03:00
+- Who: Dmitriy Elisov
+- Where: Claude Code session, review of the interface gallery
+- Decision: When a wait step is set to "Ask once more, then keep waiting", the step carries a separate message text for that second ask. The automation never sends the same message twice.
+- Why: A repeated message reads as a bot and gets reported.
+- Affects: wait_for_reply step schema (nudgeMessage), executor, editor
+- Status: active
