@@ -1,3 +1,4 @@
+import type { Definition } from '@comment-automations/shared';
 import type { Cycle } from './runner.js';
 import {
   GUIDE_URL,
@@ -6,7 +7,9 @@ import {
   blueskyReminder,
   instagramAskForEmail,
   instagramFullFlow,
+  instagramReplyOnKeyword,
   instagramReplyOnly,
+  tiktokElevenMessages,
   whatsappPricing,
   youtubeReplyOnly,
 } from './definitions.js';
@@ -487,4 +490,351 @@ const X1: Cycle = {
   },
 };
 
-export const cycles: Cycle[] = [A1, A2, A3, A4, A5, A6, A7, B1, C1, E1, X1];
+const REDELIVERED = 'Ignored a redelivered comment: this run already handles it';
+
+const WEBHOOK_FAILED_500 =
+  "Webhook failed (500): check the webhook receiver; the run's data was not delivered";
+
+const EMAIL_REPLY = 'sure, jane@example.com';
+
+const R1: Cycle = {
+  id: 'R1',
+  title: 'redelivered comment with a new event id does not start a second run',
+  run: async (world) => {
+    const ig = seeded('instagram');
+    const account = await world.account('instagram');
+    const { automationId } = await world.api.createLive(
+      account.id,
+      'Pricing guide',
+      instagramFullFlow(world.webhook.url),
+    );
+    const comment = await world.stand.comment({ postId: ig.post, userId: ig.jane, text: COMMENT });
+    await world.waitForRun(automationId, 'waiting');
+    const ingested = await world.api.ingest([
+      {
+        kind: 'comment',
+        platform: 'instagram',
+        accountId: ig.account,
+        eventId: `evt_${comment.id}_redelivered`,
+        commentId: comment.id,
+        postId: ig.post,
+        authorId: ig.jane,
+        authorHandle: '@jane.doe',
+        text: COMMENT,
+        createdAt: world.clock.now().toISOString(),
+      },
+    ]);
+    const run = await world.waitForTimeline(automationId, REDELIVERED);
+
+    expectEqual('ingest answer', ingested, { accepted: 1, duplicates: 0 });
+    expectEqual(
+      'runs',
+      (await world.api.runs(automationId)).map((candidate) => candidate.status),
+      ['waiting'],
+    );
+    expectEqual('end of the timeline', timelineOf(run).at(-1), ['info', REDELIVERED]);
+    const state = await world.stand.state('instagram');
+    expectEqual('public replies in the thread', repliesInThread(state, ig.post), [
+      'Sent you a DM, @jane.doe!',
+    ]);
+    expectEqual('gateway calls', gatewayCalls(await world.stand.eventLog()), [
+      'reply:public:OK',
+      'reply:private:OK',
+    ]);
+  },
+};
+
+const R2: Cycle = {
+  id: 'R2',
+  title: 'reply that lands before the wait step is picked up when the wait starts',
+  run: async (world) => {
+    const ig = seeded('instagram');
+    const account = await world.account('instagram');
+    const { automationId } = await world.api.createLive(
+      account.id,
+      'Pricing guide',
+      instagramFullFlow(world.webhook.url),
+    );
+    await world.stand.settings({ burst429: 1 });
+    await world.stand.comment({ postId: ig.post, userId: ig.jane, text: COMMENT });
+    await world.stand.message({ accountId: ig.account, userId: ig.jane, text: EMAIL_REPLY });
+    await world.waitForTimeline(automationId, `${RATE_LIMITED} · retrying in 1 s`);
+    await world.stand.settings({ burst429: 0 });
+    await world.clock.advance(30_000);
+    const run = await world.waitForRun(automationId, 'completed');
+
+    expectEqual('captured values', run.context.captured, { email: 'jane@example.com' });
+    expectEqual(
+      'run timeline',
+      timelineOf(run).filter(([, message]) => !message.startsWith(GIVES_UP_PREFIX)),
+      [
+        ['info', 'Started from a comment'],
+        ['warn', `${RATE_LIMITED} · retrying in 1 s`],
+        ['info', 'Replied to the comment'],
+        ['info', 'Sent the message asking for a reply'],
+        ['info', 'Reply received with an email'],
+        ['info', 'Sent the message'],
+        ['info', 'Webhook delivered (200)'],
+        ['info', 'Completed'],
+      ],
+    );
+    const state = await world.stand.state('instagram');
+    expectEqual('conversation', conversationMessages(state), [
+      ['user', EMAIL_REPLY],
+      ['account', 'Hi @jane.doe, what is your email?'],
+      ['account', 'Here is the link, sent to jane@example.com.'],
+    ]);
+    expectEqual('webhook deliveries', world.webhook.calls.length, 1);
+  },
+};
+
+const R3: Cycle = {
+  id: 'R3',
+  title: 'stopping a waiting run reports it as stopped by the user',
+  run: async (world) => {
+    const ig = seeded('instagram');
+    const account = await world.account('instagram');
+    const { automationId } = await world.api.createLive(
+      account.id,
+      'Pricing guide',
+      instagramAskForEmail,
+    );
+    await world.stand.comment({ postId: ig.post, userId: ig.jane, text: COMMENT });
+    const waiting = await world.waitForRun(automationId, 'waiting');
+    const stopped = await world.api.stopRun(waiting.id);
+    const stoppedAt = world.clock.now().toISOString();
+    await world.clock.advance(73 * HOUR);
+    const afterGiveUp = await world.api.run(waiting.id);
+
+    expectEqual(
+      'stop answer',
+      [stopped.status, timelineOf(stopped).at(-1)],
+      ['stopped', ['info', 'Stopped by the user']],
+    );
+    expectNear('finished at', String(stopped.finishedAt), stoppedAt, NEAR_MS);
+    expectEqual(
+      'run after the give-up time',
+      [afterGiveUp.status, timelineOf(afterGiveUp).at(-1)],
+      ['stopped', ['info', 'Stopped by the user']],
+    );
+    expectEqual(
+      'runs',
+      (await world.api.runs(automationId)).map((candidate) => candidate.status),
+      ['stopped'],
+    );
+  },
+};
+
+const R4: Cycle = {
+  id: 'R4',
+  title: 'archiving the automation stops its waiting run',
+  run: async (world) => {
+    const ig = seeded('instagram');
+    const account = await world.account('instagram');
+    const { automationId } = await world.api.createLive(
+      account.id,
+      'Pricing guide',
+      instagramAskForEmail,
+    );
+    await world.stand.comment({ postId: ig.post, userId: ig.jane, text: COMMENT });
+    const waiting = await world.waitForRun(automationId, 'waiting');
+    await world.api.archive(automationId);
+    const run = await world.api.run(waiting.id);
+
+    expectEqual('automation state', (await world.api.automation(automationId)).state, 'archived');
+    expectEqual(
+      'run after archiving',
+      [run.status, timelineOf(run).at(-1)],
+      ['stopped', ['info', 'Stopped because the automation was archived']],
+    );
+    expectNear('finished at', String(run.finishedAt), world.clock.now().toISOString(), NEAR_MS);
+  },
+};
+
+const R5: Cycle = {
+  id: 'R5',
+  title: 'webhook answering 500 fails the run after the retry budget',
+  run: async (world) => {
+    const ig = seeded('instagram');
+    const account = await world.account('instagram');
+    world.webhook.status = 500;
+    const { automationId } = await world.api.createLive(
+      account.id,
+      'Pricing guide',
+      instagramFullFlow(world.webhook.url),
+    );
+    await world.stand.comment({ postId: ig.post, userId: ig.jane, text: COMMENT });
+    await world.waitForRun(automationId, 'waiting');
+    await world.stand.message({ accountId: ig.account, userId: ig.jane, text: EMAIL_REPLY });
+    for (const seconds of [1, 5, 25, 120]) {
+      await world.waitForTimeline(automationId, `${WEBHOOK_FAILED_500} · retrying in ${seconds} s`);
+      await world.clock.advance(seconds * 1000);
+    }
+    const run = await world.waitForRun(automationId, 'failed');
+
+    expectEqual('run error', run.error, { code: 'WEBHOOK_FAILED', message: WEBHOOK_FAILED_500 });
+    expectEqual('end of the timeline', timelineOf(run).slice(-6), [
+      ['info', 'Sent the message'],
+      ['warn', `${WEBHOOK_FAILED_500} · retrying in 1 s`],
+      ['warn', `${WEBHOOK_FAILED_500} · retrying in 5 s`],
+      ['warn', `${WEBHOOK_FAILED_500} · retrying in 25 s`],
+      ['warn', `${WEBHOOK_FAILED_500} · retrying in 120 s`],
+      ['error', WEBHOOK_FAILED_500],
+    ]);
+    expectEqual('webhook attempts', world.webhook.calls.length, 5);
+  },
+};
+
+const R6: Cycle = {
+  id: 'R6',
+  title: 'reply after the give-up time expires the run instead of completing it',
+  run: async (world) => {
+    const ig = seeded('instagram');
+    const account = await world.account('instagram');
+    const shortWait: Definition = {
+      ...instagramAskForEmail,
+      steps: instagramAskForEmail.steps.map((step) =>
+        step.kind === 'wait_for_reply' ? { ...step, giveUpHours: 2 } : step,
+      ),
+    };
+    const { automationId } = await world.api.createLive(account.id, 'Pricing guide', shortWait);
+    await world.stand.comment({ postId: ig.post, userId: ig.jane, text: COMMENT });
+    const waiting = await world.waitForRun(automationId, 'waiting');
+    const waitUntil = waiting.timeline.find((entry) => entry.message.startsWith(GIVES_UP_PREFIX))
+      ?.context.waitUntil;
+    if (typeof waitUntil !== 'string') {
+      throw new Error(`the waiting line carries no waitUntil: ${JSON.stringify(waiting.timeline)}`);
+    }
+    expectNear(
+      'wait until',
+      waitUntil,
+      new Date(world.clock.now().getTime() + 2 * HOUR).toISOString(),
+      NEAR_MS,
+    );
+    await world.clock.set(new Date(Date.parse(waitUntil) + 60_000));
+    await world.stand.message({ accountId: ig.account, userId: ig.jane, text: EMAIL_REPLY });
+    const run = await world.waitForRun(automationId, 'expired');
+
+    expectEqual('end of the timeline', timelineOf(run).at(-1), [
+      'info',
+      'Gave up waiting for a reply',
+    ]);
+    expectEqual('captured values', run.context.captured, {});
+    const state = await world.stand.state('instagram');
+    expectEqual('conversation', conversationMessages(state), [
+      ['account', 'What is your email?'],
+      ['user', EMAIL_REPLY],
+    ]);
+    expectEqual('gateway calls', gatewayCalls(await world.stand.eventLog()), ['reply:private:OK']);
+  },
+};
+
+const R7: Cycle = {
+  id: 'R7',
+  title: 'tiktok refuses the eleventh message in a row at publish',
+  run: async (world) => {
+    const account = await world.account('tiktok');
+    const created = await world.api.create(account.id, 'Eleven messages');
+    await world.api.saveDraft(created.id, tiktokElevenMessages, true);
+    const answer = await world.api.publish(created.id);
+
+    expectEqual('publish answer', answer, {
+      status: 422,
+      issues: [
+        {
+          path: 'steps.10.kind',
+          code: 'STEP_NOT_ALLOWED_HERE',
+          message: 'TikTok allows at most 10 messages in a row before the contact replies',
+        },
+      ],
+    });
+    const detail = await world.api.automation(created.id);
+    expectEqual('automation after the refusal', [detail.state, detail.versions], ['draft', []]);
+  },
+};
+
+const R8: Cycle = {
+  id: 'R8',
+  title: 'keywords match across unicode normalisation forms and variation selectors',
+  run: async (world) => {
+    const ig = seeded('instagram');
+    const account = await world.account('instagram');
+    const cafe = await world.api.createLive(
+      account.id,
+      'Café',
+      instagramReplyOnKeyword('café'.normalize('NFC')),
+    );
+    const heart = await world.api.createLive(account.id, 'Heart', instagramReplyOnKeyword('❤️'));
+    await world.stand.comment({ postId: ig.post, userId: ig.jane, text: 'CAFÉ'.normalize('NFD') });
+    await world.stand.comment({ postId: ig.post, userId: ig.jane, text: '❤' });
+    await world.waitForRun(cafe.automationId, 'completed');
+    await world.waitForRun(heart.automationId, 'completed');
+
+    expectEqual(
+      'runs per automation',
+      [
+        (await world.api.runs(cafe.automationId)).map((run) => run.status),
+        (await world.api.runs(heart.automationId)).map((run) => run.status),
+      ],
+      [['completed'], ['completed']],
+    );
+    const state = await world.stand.state('instagram');
+    expectEqual(
+      'public replies in the thread',
+      repliesInThread(state, ig.post).sort(),
+      ['Thanks for the café, @jane.doe!', 'Thanks for the ❤️, @jane.doe!'].sort(),
+    );
+  },
+};
+
+const R9: Cycle = {
+  id: 'R9',
+  title: 'draft save overlapping a publish never loses the newer text',
+  run: async (world) => {
+    const account = await world.account('instagram');
+    const newer: Definition = {
+      ...instagramReplyOnly,
+      steps: [{ kind: 'reply_to_comment', text: 'Check your inbox, {{contact.handle}}!' }],
+    };
+    for (let round = 1; round <= 10; round += 1) {
+      const created = await world.api.create(account.id, `Race ${round}`);
+      await world.api.saveDraft(created.id, instagramReplyOnly);
+      const [, published] = await Promise.all([
+        world.api.saveDraft(created.id, newer),
+        world.api.publish(created.id),
+      ]);
+      const detail = await world.api.automation(created.id);
+      const active = detail.versions.find((version) => version.isActive)?.definition;
+
+      expectEqual(`round ${round} publish status`, published.status, 200);
+      expectEqual(
+        `round ${round} newer text kept as draft or version`,
+        detail.draft ?? active,
+        newer,
+      );
+    }
+  },
+};
+
+export const cycles: Cycle[] = [
+  A1,
+  A2,
+  A3,
+  A4,
+  A5,
+  A6,
+  A7,
+  B1,
+  C1,
+  E1,
+  X1,
+  R1,
+  R2,
+  R3,
+  R4,
+  R5,
+  R6,
+  R7,
+  R8,
+  R9,
+];
