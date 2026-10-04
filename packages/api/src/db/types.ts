@@ -39,6 +39,7 @@ export type RunContext = {
   postId?: PostId;
   conversationId?: ConversationId;
   lastInboundAt?: string;
+  consumedEventIds?: EventId[];
   captured: { email?: string };
   replied: boolean;
 };
@@ -81,6 +82,7 @@ export type EventsTable = {
   account_id: string;
   external_event_id: string;
   kind: InboundEvent['kind'];
+  message_id: string | null;
   payload: Json<InboundEvent>;
   received_at: Timestamp;
 };
