@@ -110,9 +110,11 @@ export const StepsCard = ({
     next.splice(to, 0, step as Step);
     onChange(next);
   };
+  const listIssues = issues.filter((issue) => issue.path === 'steps');
   return (
-    <div className="card">
+    <div className={listIssues.length > 0 ? 'card err' : 'card'}>
       <h3>Then…</h3>
+      <IssueTexts issues={listIssues} />
       <div className="steps">
         {steps.map((step, index) => {
           const path = `steps.${index}`;

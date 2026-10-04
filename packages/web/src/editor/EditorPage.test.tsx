@@ -209,6 +209,67 @@ describe('editor page', () => {
     expect(screen.queryByText('Draft saved')).toBeNull();
   });
 
+  it('shows the missing-steps issue in the Steps card and the toast when publishing without steps', async () => {
+    const noSteps = { ...detail, draft: { ...detail.draft!, steps: [] } };
+    mockFetch({
+      '/automations/a_1': () => json(noSteps),
+      '/automations/a_1/publish': () =>
+        json(
+          { issues: [{ path: 'steps', code: 'STEPS_REQUIRED', message: 'Add at least one step' }] },
+          422,
+        ),
+    });
+    renderEditor();
+    await screen.findByText('Not published yet');
+    fireEvent.click(screen.getByText('Publish'));
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Publish' }));
+    const shown = await screen.findAllByText('Add at least one step');
+    const card = screen.getByRole('heading', { name: 'Then…' }).closest('.card') as HTMLElement;
+    expect(shown.map((node) => node.className)).toEqual(['errtext', 'toast bad']);
+    expect(within(card).getByText('Add at least one step').className).toBe('errtext');
+    expect(card.className).toBe('card err');
+    expect(screen.queryByText('Fix the highlighted fields and try again.')).toBeNull();
+  });
+
+  it('lists issues no card renders in a callout above the cards', async () => {
+    mockFetch({
+      '/automations/a_1/publish': () =>
+        json(
+          { issues: [{ path: 'name', code: 'NAME_REQUIRED', message: 'Name must not be empty' }] },
+          422,
+        ),
+    });
+    renderEditor();
+    await screen.findByText('Not published yet');
+    fireEvent.click(screen.getByText('Publish'));
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Publish' }));
+    const shown = await screen.findAllByText('Name must not be empty');
+    expect(shown.map((node) => node.className)).toEqual(['', 'toast bad']);
+    expect(shown[0]?.closest('.callout.bad')).not.toBeNull();
+  });
+
+  it('counts the issues in the toast when there are several', async () => {
+    mockFetch({
+      '/automations/a_1/publish': () =>
+        json(
+          {
+            issues: [
+              { path: 'steps.0.text', code: 'TEXT_REQUIRED', message: 'Text must not be empty' },
+              { path: 'name', code: 'NAME_REQUIRED', message: 'Name must not be empty' },
+            ],
+          },
+          422,
+        ),
+    });
+    renderEditor();
+    await screen.findByText('Not published yet');
+    fireEvent.click(screen.getByText('Publish'));
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Publish' }));
+    await screen.findByText('Fix the 2 issues shown below and try again.');
+    expect(screen.getByText('Write the text to send.')).not.toBeNull();
+    expect(screen.getByText('Name must not be empty')).not.toBeNull();
+  });
+
   it('shows the API message when a save is rejected with 400', async () => {
     mockFetch({
       [saveUrl]: () =>
