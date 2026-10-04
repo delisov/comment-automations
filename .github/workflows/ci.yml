@@ -39,7 +39,14 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - run: docker build --build-arg GIT_SHA=${{ github.sha }} -t comment-automations-api .
-      - run: docker run -d --name api -p 3000:3000 comment-automations-api
+      - run: docker network create ci
+      - run: docker run -d --name postgres --network ci -e POSTGRES_DB=app -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=postgres postgres:16-alpine
+      - run: for i in $(seq 1 20); do docker exec postgres pg_isready -U postgres -d app && break; sleep 1; done
+      - run: >-
+          docker run -d --name api --network ci -p 3000:3000
+          -e DATABASE_URL=postgres://postgres:postgres@postgres:5432/app
+          -e GATEWAY_MODE=test -e GATEWAY_URL=http://stand:3100 -e SERVICE_TOKEN=ci
+          comment-automations-api
       - run: |
           for i in $(seq 1 20); do curl -sf localhost:3000/health && break; sleep 1; done
           curl -sf localhost:3000/health | grep -q "\"sha\":\"${{ github.sha }}\""

@@ -28,6 +28,7 @@ export const AutomationSummary = Type.Object({
   platform: Platform,
   state: AutomationState,
   activeVersionNumber: Type.Union([Type.Integer({ minimum: 1 }), Type.Null()]),
+  triggerSummary: Type.String(),
   stats: AutomationStats,
 });
 
@@ -39,6 +40,7 @@ export const VersionSummary = Type.Object({
   note: Type.String(),
   publishedAt: Timestamp,
   isActive: Type.Boolean(),
+  definition: DefinitionSchema,
 });
 
 export type VersionSummary = Static<typeof VersionSummary>;
