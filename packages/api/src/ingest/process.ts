@@ -11,12 +11,28 @@ import { loadRun } from '../runs/store.js';
 
 type Outcome = 'accepted' | 'duplicate';
 
+const withoutNul = <T>(value: T): T => {
+  if (typeof value === 'string') {
+    return value.replaceAll('\u0000', '') as T;
+  }
+  if (Array.isArray(value)) {
+    return value.map(withoutNul) as T;
+  }
+  if (typeof value === 'object' && value !== null) {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, entry]) => [key, withoutNul(entry)]),
+    ) as T;
+  }
+  return value;
+};
+
 const processEvent = async (
   deps: Deps,
   trx: Transaction<Database>,
-  event: InboundEvent,
+  received: InboundEvent,
 ): Promise<Outcome> => {
   const now = deps.clock.now();
+  const event = withoutNul(received);
   const inserted = await trx
     .insertInto('events')
     .values({
@@ -93,13 +109,14 @@ const processEvent = async (
     .orderBy('started_at')
     .forUpdate()
     .execute();
-  if (waiting.length > 0) {
-    for (const { id } of waiting) {
-      const loaded = await loadRun(trx, id);
-      if (loaded !== undefined) {
-        await resumeWaitingRun(deps, trx, loaded, event);
-      }
+  let resumed = false;
+  for (const { id } of waiting) {
+    const loaded = await loadRun(trx, id);
+    if (loaded !== undefined && (await resumeWaitingRun(deps, trx, loaded, event))) {
+      resumed = true;
     }
+  }
+  if (resumed) {
     return 'accepted';
   }
   const context: RunContext = {

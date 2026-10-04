@@ -1,5 +1,4 @@
 import type { AccountId, ContactId, EventId, RunId } from '@comment-automations/shared';
-import { sql } from 'kysely';
 import type { Db, RunContext } from '../db/types.js';
 import { json } from '../db/types.js';
 import type { LiveAutomation } from './match.js';
@@ -33,7 +32,24 @@ export const liveAutomations = async (db: Db, accountId: AccountId): Promise<Liv
 
 export const startRun = async (db: Db, input: StartRunInput): Promise<RunId | undefined> => {
   const { automation, now } = input;
+  const commentId = input.context.commentId ?? null;
   for (;;) {
+    if (commentId !== null) {
+      const handled = await db
+        .selectFrom('runs')
+        .select('id')
+        .where('automation_id', '=', automation.id)
+        .where('comment_id', '=', commentId)
+        .executeTakeFirst();
+      if (handled !== undefined) {
+        await logRun(db, handled.id, now, {
+          stepIndex: null,
+          message: 'Ignored a redelivered comment: this run already handles it',
+          context: { triggerEventId: input.triggerEventId },
+        });
+        return undefined;
+      }
+    }
     const active = await db
       .selectFrom('runs')
       .select(['id', 'step_index'])
@@ -59,6 +75,7 @@ export const startRun = async (db: Db, input: StartRunInput): Promise<RunId | un
         account_id: input.accountId,
         contact_id: input.contactId,
         trigger_event_id: input.triggerEventId,
+        comment_id: commentId,
         status: 'running',
         step_index: 0,
         context: json(input.context),
@@ -66,12 +83,7 @@ export const startRun = async (db: Db, input: StartRunInput): Promise<RunId | un
         started_at: now,
         updated_at: now,
       })
-      .onConflict((conflict) =>
-        conflict
-          .columns(['automation_id', 'contact_id'])
-          .where(sql<boolean>`status in ('running', 'waiting')`)
-          .doNothing(),
-      )
+      .onConflict((conflict) => conflict.doNothing())
       .returning('id')
       .executeTakeFirst();
     if (inserted === undefined) {

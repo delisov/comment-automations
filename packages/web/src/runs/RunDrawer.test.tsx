@@ -68,4 +68,14 @@ describe('run drawer', () => {
     await screen.findByText('body must be object');
     expect(screen.getByText('Stop this run')).not.toBeNull();
   });
+
+  it('labels a stopped run as Stopped', async () => {
+    const stopped: RunDetail = { ...run, status: 'stopped', finishedAt: '2026-10-04T10:05:00Z' };
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(JSON.stringify(stopped), { status: 200 })),
+    );
+    render(<RunDrawer runId={run.id} stepTitles={[]} onClose={vi.fn()} onChanged={vi.fn()} />);
+    expect(await screen.findByText('Stopped')).not.toBeNull();
+  });
 });

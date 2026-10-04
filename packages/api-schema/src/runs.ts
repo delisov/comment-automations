@@ -16,6 +16,7 @@ export const RunStatus = Type.Union([
   Type.Literal('failed'),
   Type.Literal('expired'),
   Type.Literal('superseded'),
+  Type.Literal('stopped'),
 ]);
 
 export type RunStatus = Static<typeof RunStatus>;

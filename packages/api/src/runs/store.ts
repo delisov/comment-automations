@@ -178,7 +178,7 @@ export const saveContext = async (
 export const finishRun = (
   db: Db,
   runId: RunId,
-  status: 'completed' | 'failed' | 'expired' | 'superseded',
+  status: 'completed' | 'failed' | 'expired' | 'superseded' | 'stopped',
   now: Date,
   entry: LogEntry,
   error: RunError | null = null,
