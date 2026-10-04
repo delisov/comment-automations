@@ -126,6 +126,8 @@ export const App = () => {
             account={account}
             user={user}
             rules={rules}
+            log={log}
+            deliveries={deliveries}
             onMessage={(body) => act(() => api.message(body))}
           />
         </div>

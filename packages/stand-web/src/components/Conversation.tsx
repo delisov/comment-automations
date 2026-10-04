@@ -1,15 +1,26 @@
 import { useState } from 'react';
-import type { Account, Rules, State, User } from '../api.js';
+import type { Account, Delivery, LogEntry, Rules, State, User } from '../api.js';
+import { annotateMessage } from './annotate.js';
 
 type Props = {
   state: State;
   account: Account | null;
   user: User | null;
   rules: Rules | null;
+  log: LogEntry[];
+  deliveries: Delivery[];
   onMessage: (body: { accountId: string; userId: string; text: string }) => void;
 };
 
-export const Conversation = ({ state, account, user, rules, onMessage }: Props) => {
+export const Conversation = ({
+  state,
+  account,
+  user,
+  rules,
+  log,
+  deliveries,
+  onMessage,
+}: Props) => {
   const [draft, setDraft] = useState('');
 
   if (rules && rules.messaging.kind === 'none') {
@@ -63,6 +74,13 @@ export const Conversation = ({ state, account, user, rules, onMessage }: Props) 
             <span className="meta">
               {message.from === 'account' ? account.handle : user.handle} · {message.created_at}
             </span>
+            <div className="tags">
+              {annotateMessage(message, log, deliveries).map((tag, index) => (
+                <span key={index} className={`tag ${tag.tone}`}>
+                  {tag.text}
+                </span>
+              ))}
+            </div>
           </div>
         ))}
       </div>

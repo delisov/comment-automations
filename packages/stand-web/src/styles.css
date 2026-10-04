@@ -236,6 +236,11 @@ input[type='number'] {
   margin-top: 6px;
 }
 
+.knobs .hint {
+  font-size: 12px;
+  margin-bottom: 6px;
+}
+
 .post {
   margin-bottom: 14px;
 }
@@ -395,10 +400,6 @@ table.deliveries td {
 
 .status-failed {
   color: var(--danger);
-}
-
-.status-dropped {
-  color: var(--warn);
 }
 
 @media (max-width: 1200px) {
