@@ -73,7 +73,7 @@ export type RunDetail = Static<typeof RunDetail>;
 export const RunsQuery = Type.Object({
   status: Type.Optional(Type.Array(RunStatus)),
   versionIds: Type.Optional(Type.Array(VersionIdSchema)),
-  contact: Type.Optional(Type.String()),
+  contact: Type.Optional(Type.String({ maxLength: 120 })),
   limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 200, default: 50 })),
   cursor: Type.Optional(Type.String()),
 });

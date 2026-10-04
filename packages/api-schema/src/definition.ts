@@ -2,9 +2,13 @@ import { Type } from '@sinclair/typebox';
 import type { Static } from '@sinclair/typebox';
 import { PostIdSchema } from './ids.js';
 
+const Text = Type.String({ maxLength: 10_000 });
+
+const Url = Type.String({ maxLength: 2048 });
+
 export const ButtonSchema = Type.Object({
-  title: Type.String(),
-  url: Type.String(),
+  title: Type.String({ maxLength: 120 }),
+  url: Url,
 });
 
 export const PostSelectionSchema = Type.Union([
@@ -12,13 +16,15 @@ export const PostSelectionSchema = Type.Union([
   Type.Object({ kind: Type.Literal('specific'), postId: PostIdSchema }),
 ]);
 
+const Keywords = Type.Array(Type.String({ maxLength: 100 }), { maxItems: 50 });
+
 export const CommentsTriggerSchema = Type.Object({
   posts: PostSelectionSchema,
-  keywords: Type.Array(Type.String()),
+  keywords: Keywords,
 });
 
 export const MessagesTriggerSchema = Type.Object({
-  keywords: Type.Array(Type.String()),
+  keywords: Keywords,
 });
 
 export const TriggerSchema = Type.Object({
@@ -36,27 +42,27 @@ export const StepKindSchema = Type.Union([
 
 export const ReplyToCommentStepSchema = Type.Object({
   kind: Type.Literal('reply_to_comment'),
-  text: Type.String(),
+  text: Text,
 });
 
 export const SendMessageStepSchema = Type.Object({
   kind: Type.Literal('send_message'),
-  text: Type.String(),
-  buttons: Type.Array(ButtonSchema),
+  text: Text,
+  buttons: Type.Array(ButtonSchema, { maxItems: 3 }),
   onUnreachable: Type.Optional(
     Type.Union([Type.Literal('fail'), Type.Literal('skip'), Type.Literal('publicReplyInstead')]),
   ),
-  fallbackText: Type.Optional(Type.String()),
+  fallbackText: Type.Optional(Text),
 });
 
 export const WaitForReplyStepSchema = Type.Object({
   kind: Type.Literal('wait_for_reply'),
   expect: Type.Union([Type.Literal('email'), Type.Literal('any')]),
   giveUpHours: Type.Number(),
-  reminder: Type.Optional(Type.Object({ afterHours: Type.Number(), text: Type.String() })),
+  reminder: Type.Optional(Type.Object({ afterHours: Type.Number(), text: Text })),
   nudge: Type.Optional(
     Type.Object({
-      text: Type.String(),
+      text: Text,
       then: Type.Union([Type.Literal('wait'), Type.Literal('end')]),
     }),
   ),
@@ -71,8 +77,8 @@ export const CallWebhookStepSchema = Type.Object({
     Type.Literal('PATCH'),
     Type.Literal('DELETE'),
   ]),
-  url: Type.String(),
-  headers: Type.Record(Type.String(), Type.String()),
+  url: Url,
+  headers: Type.Record(Type.String(), Type.String({ maxLength: 4096 }), { maxProperties: 10 }),
 });
 
 export const StepSchema = Type.Union([
@@ -84,7 +90,7 @@ export const StepSchema = Type.Union([
 
 export const DefinitionSchema = Type.Object({
   trigger: TriggerSchema,
-  steps: Type.Array(StepSchema),
+  steps: Type.Array(StepSchema, { maxItems: 20 }),
 });
 
 export type DefinitionSchema = Static<typeof DefinitionSchema>;

@@ -23,9 +23,14 @@ export const buildApp = (deps: AppDeps): App => {
     if ((error as { code?: string }).code === '22P02') {
       return reply.status(404).send({ error: 'Not found' });
     }
+    if (((error as { statusCode?: number }).statusCode ?? 500) >= 500) {
+      console.error(error);
+      return reply.status(500).send({ error: 'Internal error' });
+    }
     return reply.send(error);
   });
 
+  registerStatic(app, deps.publicDir);
   registerAccountRoutes(app, deps);
   registerAutomationRoutes(app, deps);
   registerRunRoutes(app, deps);
@@ -33,7 +38,6 @@ export const buildApp = (deps: AppDeps): App => {
   if (deps.testMode) {
     registerTestRoutes(app, deps);
   }
-  registerStatic(app, deps.publicDir);
 
   return app;
 };

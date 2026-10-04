@@ -11,6 +11,7 @@ export type Config = {
   gitSha: string;
   clockMode: ClockMode;
   workerPollMs: number;
+  webhookAllowPrivate: boolean;
 };
 
 type Env = Record<string, string | undefined>;
@@ -54,6 +55,10 @@ export const loadConfig = (env: Env): Config => {
   if (gatewayMode === 'real' && clockMode === 'controlled') {
     throw new Error('GATEWAY_MODE=real cannot run with CLOCK_MODE=controlled');
   }
+  const webhookAllowPrivate = env.WEBHOOK_ALLOW_PRIVATE === 'true';
+  if (gatewayMode === 'real' && webhookAllowPrivate) {
+    throw new Error('GATEWAY_MODE=real cannot run with WEBHOOK_ALLOW_PRIVATE=true');
+  }
   return {
     gatewayMode,
     gatewayUrl: required(env, 'GATEWAY_URL'),
@@ -63,5 +68,6 @@ export const loadConfig = (env: Env): Config => {
     gitSha: env.GIT_SHA ?? 'dev',
     clockMode,
     workerPollMs: integer(env, 'WORKER_POLL_MS', 500),
+    webhookAllowPrivate,
   };
 };

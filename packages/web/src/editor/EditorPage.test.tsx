@@ -14,6 +14,7 @@ const detail: AutomationDetail = {
   platform: 'instagram',
   state: 'draft',
   activeVersionNumber: null,
+  triggerSummary: 'Comments on any post · pricing',
   stats: { runs24h: 0, succeeded24h: 0, failed24h: 0, lastRunAt: null },
   draft: {
     trigger: {
