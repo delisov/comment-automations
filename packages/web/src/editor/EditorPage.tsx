@@ -49,6 +49,18 @@ const emptyDefinition: DefinitionSchema = {
   steps: [],
 };
 
+const allowedTriggersOnly = (
+  definition: DefinitionSchema,
+  allowed: CapabilitiesResponse['allowedTriggers'],
+): DefinitionSchema => ({
+  ...definition,
+  trigger: {
+    ...definition.trigger,
+    comments: allowed.comments ? definition.trigger.comments : undefined,
+    messages: allowed.messages ? definition.trigger.messages : undefined,
+  },
+});
+
 const StatePill = ({ state }: { state: AutomationDetail['state'] }) =>
   state === 'live' ? (
     <Pill tone="ok">Live</Pill>
@@ -81,6 +93,7 @@ const publishSummary = (definition: DefinitionSchema, handle: string): string =>
 const useEditorState = (
   id: AutomationId,
   viewingVersion: VersionId | null,
+  caps: CapabilitiesResponse | null,
   detail: ReturnType<typeof useAsync<AutomationDetail>>,
   versions: ReturnType<typeof useAsync<Version[]>>,
 ) => {
@@ -93,7 +106,12 @@ const useEditorState = (
   }, [id, viewingVersion]);
 
   useEffect(() => {
-    if (definition !== null || detail.data === undefined || versions.data === undefined) {
+    if (
+      definition !== null ||
+      caps === null ||
+      detail.data === undefined ||
+      versions.data === undefined
+    ) {
       return;
     }
     if (viewingVersion !== null) {
@@ -101,20 +119,21 @@ const useEditorState = (
       setDefinition(version?.definition ?? emptyDefinition);
       return;
     }
+    const edit = (loaded: DefinitionSchema) => {
+      setDefinition(allowedTriggersOnly(loaded, caps.allowedTriggers));
+      setSaved(JSON.stringify(loaded));
+    };
     if (detail.data.draft !== null) {
-      setDefinition(detail.data.draft);
-      setSaved(JSON.stringify(detail.data.draft));
+      edit(detail.data.draft);
       return;
     }
     const active = versions.data.find((item) => item.isActive);
     if (active === undefined) {
-      setDefinition(emptyDefinition);
-      setSaved(JSON.stringify(emptyDefinition));
+      edit(emptyDefinition);
       return;
     }
     if (active.definition !== undefined) {
-      setDefinition(active.definition);
-      setSaved(JSON.stringify(active.definition));
+      edit(active.definition);
       return;
     }
     if (materializing) {
@@ -124,9 +143,7 @@ const useEditorState = (
     api.draftFromVersion(id, active.id).then(
       (result) => {
         detail.setData(result);
-        const draft = result.draft ?? emptyDefinition;
-        setDefinition(draft);
-        setSaved(JSON.stringify(draft));
+        edit(result.draft ?? emptyDefinition);
         setMaterializing(false);
       },
       () => {
@@ -134,7 +151,7 @@ const useEditorState = (
         setMaterializing(false);
       },
     );
-  }, [definition, detail, versions, viewingVersion, id, materializing]);
+  }, [definition, caps, detail, versions, viewingVersion, id, materializing]);
 
   const dirty =
     definition !== null && viewingVersion === null && JSON.stringify(definition) !== saved;
@@ -154,9 +171,17 @@ export const EditorPage = ({ tab }: { tab: Tab }) => {
     () => api.runs(id, { status: ['running', 'waiting'], limit: 200 }),
     [id],
   );
+  const account = accounts.data?.find((item) => item.id === detail.data?.accountId);
+  const caps: CapabilitiesResponse | null =
+    detail.data === undefined || accounts.data === undefined
+      ? null
+      : account === undefined
+        ? deriveCapabilities(capabilities[detail.data.platform])
+        : capabilitiesFor(account);
   const { definition, setDefinition, setSaved, dirty } = useEditorState(
     id,
     viewingVersion,
+    caps,
     detail,
     versions,
   );
@@ -190,17 +215,12 @@ export const EditorPage = ({ tab }: { tab: Tab }) => {
       </Callout>
     );
   }
-  if (detail.data === undefined || definition === null || accounts.data === undefined) {
+  if (detail.data === undefined || definition === null || caps === null) {
     return <Skeleton rows={5} />;
   }
 
   const automation = detail.data;
   const versionList: Version[] = versions.data ?? automation.versions;
-  const account = accounts.data.find((item) => item.id === automation.accountId);
-  const caps: CapabilitiesResponse =
-    account === undefined
-      ? deriveCapabilities(capabilities[automation.platform])
-      : capabilitiesFor(account);
   const handle = account?.handle ?? platformLabel(automation.platform);
   const viewed =
     viewingVersion === null
@@ -224,6 +244,8 @@ export const EditorPage = ({ tab }: { tab: Tab }) => {
     if (failure instanceof ApiError && failure.status === 422) {
       setIssues(failure.issues);
       setToast({ tone: 'bad', text: 'Fix the highlighted fields and try again.' });
+    } else if (failure instanceof ApiError) {
+      setToast({ tone: 'bad', text: failure.message });
     } else {
       setToast({ tone: 'bad', text: 'Couldn’t save. Check your connection and try again.' });
     }
