@@ -8,7 +8,7 @@ import type {
   WebhookMethod,
 } from '@comment-automations/shared';
 import { WEBHOOK_METHODS } from '@comment-automations/shared';
-import { byteCount, charCount, formatCount } from '../format.js';
+import { byteCount, charCount, formatCount, plural } from '../format.js';
 import { platformLabel } from '../ui.js';
 import { ErrorText, issueAt } from './issues.js';
 
@@ -34,6 +34,25 @@ export const stepTitle = (step: Step): string => {
   }
 };
 
+export const fieldIssuePaths = (step: Step): string[] => {
+  switch (step.kind) {
+    case 'reply_to_comment':
+      return ['text'];
+    case 'send_message':
+      return [
+        'text',
+        'fallbackText',
+        'buttons',
+        'onUnreachable',
+        ...step.buttons.flatMap((_, index) => [`buttons.${index}.title`, `buttons.${index}.url`]),
+      ];
+    case 'wait_for_reply':
+      return ['giveUpHours', 'reminder.text', 'reminder.afterHours', 'nudge.text'];
+    case 'call_webhook':
+      return ['url'];
+  }
+};
+
 export const paletteEntry = (
   kind: StepKind,
   caps: CapabilitiesResponse,
@@ -49,7 +68,7 @@ export const paletteEntry = (
         subtitle: privateReply
           ? 'Private reply to the comment with text'
           : buttons > 0
-            ? `Direct message with text and up to ${buttons} buttons`
+            ? `Direct message with text and up to ${plural(buttons, 'button')}`
             : 'Direct message with text',
       };
     }
@@ -170,6 +189,7 @@ export const MessageStep = ({
   const error = issueAt(issues, `${path}.text`);
   const fallbackError = issueAt(issues, `${path}.fallbackText`);
   const buttonsError = issueAt(issues, `${path}.buttons`);
+  const unreachableError = issueAt(issues, `${path}.onUnreachable`);
   const setButton = (index: number, patch: Partial<SendMessageStep['buttons'][number]>) =>
     onChange({
       ...step,
@@ -187,43 +207,49 @@ export const MessageStep = ({
       />
       <ErrorText text={error} />
       <Counter text={step.text} limits={limits} />
-      {step.buttons.map((button, index) => (
-        <div key={index} className="btnrow">
-          <span className="btnlike" style={{ margin: 0 }}>
-            {button.title === '' ? 'Button' : button.title}
-          </span>
-          <input
-            className={issueAt(issues, `${path}.buttons.${index}.title`) ? 'input err' : 'input'}
-            aria-label={`Button ${index + 1} title`}
-            placeholder="Title"
-            maxLength={20}
-            value={button.title}
-            readOnly={readOnly}
-            onChange={(event) => setButton(index, { title: event.target.value })}
-          />
-          <input
-            className={
-              issueAt(issues, `${path}.buttons.${index}.url`) ? 'input url err' : 'input url'
-            }
-            aria-label={`Button ${index + 1} url`}
-            placeholder="https://"
-            value={button.url}
-            readOnly={readOnly}
-            onChange={(event) => setButton(index, { url: event.target.value })}
-          />
-          {readOnly ? null : (
-            <button
-              type="button"
-              className="addlink"
-              onClick={() =>
-                onChange({ ...step, buttons: step.buttons.filter((_, i) => i !== index) })
-              }
-            >
-              Remove
-            </button>
-          )}
-        </div>
-      ))}
+      {step.buttons.map((button, index) => {
+        const titleError = issueAt(issues, `${path}.buttons.${index}.title`);
+        const urlError = issueAt(issues, `${path}.buttons.${index}.url`);
+        return (
+          <div key={index}>
+            <div className="btnrow">
+              <span className="btnlike" style={{ margin: 0 }}>
+                {button.title === '' ? 'Button' : button.title}
+              </span>
+              <input
+                className={titleError === null ? 'input' : 'input err'}
+                aria-label={`Button ${index + 1} title`}
+                placeholder="Title"
+                maxLength={20}
+                value={button.title}
+                readOnly={readOnly}
+                onChange={(event) => setButton(index, { title: event.target.value })}
+              />
+              <input
+                className={urlError === null ? 'input url' : 'input url err'}
+                aria-label={`Button ${index + 1} url`}
+                placeholder="https://"
+                value={button.url}
+                readOnly={readOnly}
+                onChange={(event) => setButton(index, { url: event.target.value })}
+              />
+              {readOnly ? null : (
+                <button
+                  type="button"
+                  className="addlink"
+                  onClick={() =>
+                    onChange({ ...step, buttons: step.buttons.filter((_, i) => i !== index) })
+                  }
+                >
+                  Remove
+                </button>
+              )}
+            </div>
+            <ErrorText text={titleError} />
+            <ErrorText text={urlError} />
+          </div>
+        );
+      })}
       <ErrorText text={buttonsError} />
       {privateReply ? (
         <div className="meta">Sent as a private reply to the comment · text only</div>
@@ -284,6 +310,7 @@ export const MessageStep = ({
           ) : null}
         </div>
       ) : null}
+      <ErrorText text={unreachableError} />
     </>
   );
 };

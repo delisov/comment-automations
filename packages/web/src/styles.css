@@ -449,6 +449,10 @@ td .sub {
   font-size: 13px;
   font-weight: 500;
 }
+.kw span.err {
+  background: #fee2e2;
+  color: #b91c1c;
+}
 .kw .kwph {
   color: var(--faint);
   font-size: 13px;

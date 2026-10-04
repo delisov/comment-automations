@@ -13,7 +13,8 @@ import { AnalyticsTab } from '../analytics/AnalyticsTab.js';
 import type { Version } from '../api/client.js';
 import { api, ApiError } from '../api/client.js';
 import { capabilitiesFor, deriveCapabilities } from '../capabilities.js';
-import { listWords } from '../format.js';
+import { listWords, plural } from '../format.js';
+import { NotFoundPage } from '../NotFoundPage.js';
 import { RunsTab } from '../runs/RunsTab.js';
 import type { ToastMessage } from '../ui.js';
 import {
@@ -28,7 +29,6 @@ import {
 } from '../ui.js';
 import { useAsync } from '../useAsync.js';
 import { WikiModal } from '../wiki/WikiModal.js';
-import { stepTitle } from './steps.js';
 import { StepsCard } from './StepsCard.js';
 import { TriggerCard } from './TriggerCard.js';
 import { inProgressByVersion, VersionsWindow } from './VersionsWindow.js';
@@ -217,6 +217,13 @@ export const EditorPage = ({ tab }: { tab: Tab }) => {
       </Callout>
     );
   }
+  if (
+    viewingVersion !== null &&
+    versions.data !== undefined &&
+    !versions.data.some((item) => item.id === viewingVersion)
+  ) {
+    return <NotFoundPage />;
+  }
   if (detail.data === undefined || definition === null || caps === null) {
     return <Skeleton rows={5} />;
   }
@@ -235,6 +242,8 @@ export const EditorPage = ({ tab }: { tab: Tab }) => {
   const nextNumber = versionList.reduce((max, item) => Math.max(max, item.number), 0) + 1;
   const hasMessageStep = definition.steps.some((step) => step.kind === 'send_message');
   const inProgress = inProgressByVersion(inProgressRuns.data?.runs ?? []);
+  const inProgressCount = inProgressRuns.data?.runs.length ?? 0;
+  const activeInProgress = active === null ? 0 : (inProgress.get(active.number) ?? 0);
   const keywords =
     definition.trigger.comments?.keywords ?? definition.trigger.messages?.keywords ?? [];
 
@@ -268,6 +277,12 @@ export const EditorPage = ({ tab }: { tab: Tab }) => {
       return false;
     } finally {
       setBusy(false);
+    }
+  };
+
+  const save = async () => {
+    if (await saveDraft()) {
+      setToast({ tone: 'ok', text: 'Draft saved' });
     }
   };
 
@@ -358,26 +373,22 @@ export const EditorPage = ({ tab }: { tab: Tab }) => {
     }
   };
 
-  const actions = readOnly ? (
+  const actions = locked ? (
     <>
       <Button kind="ghost" onClick={() => setDialog({ kind: 'versions' })}>
         Versions
       </Button>
-      {viewed === null ? null : (
+      {viewed === null || archived ? null : (
         <Button kind="sec" disabled={busy} onClick={() => editAsNew(viewed)}>
           Edit as a new version
         </Button>
       )}
-      {viewed === null || viewed.isActive ? null : (
+      {viewed === null || archived || viewed.isActive ? null : (
         <Button disabled={busy} onClick={() => setDialog({ kind: 'makeActive', version: viewed })}>
           Make active
         </Button>
       )}
     </>
-  ) : archived ? (
-    <Button kind="ghost" onClick={() => setDialog({ kind: 'versions' })}>
-      Versions
-    </Button>
   ) : automation.state === 'live' ? (
     <>
       <Button kind="ghost" disabled={busy} onClick={() => setDialog({ kind: 'archive' })}>
@@ -386,7 +397,7 @@ export const EditorPage = ({ tab }: { tab: Tab }) => {
       <Button kind="ghost" disabled={busy} onClick={() => setDialog({ kind: 'moveToDraft' })}>
         Move to draft
       </Button>
-      <Button kind="sec" disabled={busy} onClick={saveDraft}>
+      <Button kind="sec" disabled={busy} onClick={save}>
         {busy ? 'Saving…' : 'Save'}
       </Button>
       <Button disabled={busy} onClick={() => setDialog({ kind: 'publish' })}>
@@ -398,7 +409,7 @@ export const EditorPage = ({ tab }: { tab: Tab }) => {
       <Button kind="ghost" disabled={busy} onClick={() => setDialog({ kind: 'archive' })}>
         Archive
       </Button>
-      <Button kind="sec" disabled={busy} onClick={saveDraft}>
+      <Button kind="sec" disabled={busy} onClick={save}>
         {busy ? 'Saving…' : 'Save draft'}
       </Button>
       <Button disabled={busy} onClick={() => setDialog({ kind: 'publish' })}>
@@ -456,7 +467,6 @@ export const EditorPage = ({ tab }: { tab: Tab }) => {
           versions={versionList}
           keywords={keywords}
           handle={handle}
-          stepTitles={definition.steps.map(stepTitle)}
           onOpenWiki={() => setDialog({ kind: 'wiki' })}
         />
       ) : tab === 'analytics' && !readOnly ? (
@@ -471,9 +481,11 @@ export const EditorPage = ({ tab }: { tab: Tab }) => {
             <div className="vbanner">
               <span>
                 <b>You are viewing version {viewed.number}.</b>{' '}
-                {viewed.isActive
-                  ? 'It is the active version. Nothing here is editable; edit it as a new version to change it.'
-                  : `The active version is ${active === null ? 'none' : active.number}. Nothing here is editable until you make it active or edit it as a new version.`}
+                {archived
+                  ? 'The automation is archived; nothing here is editable.'
+                  : viewed.isActive
+                    ? 'It is the active version. Nothing here is editable; edit it as a new version to change it.'
+                    : `The active version is ${active === null ? 'none' : active.number}. Nothing here is editable until you make it active or edit it as a new version.`}
                 {viewed.definition === undefined
                   ? ' The steps of this version are not available from the API yet.'
                   : ''}
@@ -548,8 +560,8 @@ export const EditorPage = ({ tab }: { tab: Tab }) => {
             {active === null
               ? ''
               : ` Version ${active.number} stays in the history and can be made active again at any time.`}
-            {active !== null && (inProgress.get(active.number) ?? 0) > 0
-              ? ` ${inProgress.get(active.number)} runs in progress on version ${active.number} finish on version ${active.number}.`
+            {active !== null && activeInProgress > 0
+              ? ` ${plural(activeInProgress, 'run')} in progress on version ${active.number} will finish on version ${active.number}.`
               : ''}
           </p>
           <p>
@@ -566,11 +578,11 @@ export const EditorPage = ({ tab }: { tab: Tab }) => {
           text={
             active === null
               ? publishSummary(definition, handle)
-              : `Version ${active.number} stays in the history unchanged.${
-                  (inProgress.get(active.number) ?? 0) > 0
-                    ? ` ${inProgress.get(active.number)} runs in progress on version ${active.number} finish on it;`
-                    : ''
-                } new comments and messages run version ${nextNumber}.`
+              : `Version ${active.number} stays in the history unchanged. ${
+                  activeInProgress > 0
+                    ? `${plural(activeInProgress, 'run')} in progress on version ${active.number} will finish on it; new`
+                    : 'New'
+                } comments and messages run version ${nextNumber}.`
           }
           onClose={() => setDialog(null)}
           footer={
@@ -595,7 +607,8 @@ export const EditorPage = ({ tab }: { tab: Tab }) => {
             />
           </div>
           <Callout tone="info">
-            Test it from another account: your own comments never trigger an automation.
+            Test it from another account: your own{' '}
+            {caps.allowedTriggers.comments ? 'comments' : 'messages'} never trigger an automation.
           </Callout>
         </Modal>
       ) : null}
@@ -603,9 +616,9 @@ export const EditorPage = ({ tab }: { tab: Tab }) => {
         <Modal
           title="Move to draft?"
           text={`It stops answering new comments and messages.${
-            inProgressRuns.data === undefined || inProgressRuns.data.runs.length === 0
+            inProgressCount === 0
               ? ''
-              : ` ${inProgressRuns.data.runs.length} runs already in progress will finish.`
+              : ` ${plural(inProgressCount, 'run')} already in progress will finish.`
           }`}
           onClose={() => setDialog(null)}
           footer={
@@ -622,9 +635,7 @@ export const EditorPage = ({ tab }: { tab: Tab }) => {
         <Modal
           title={`Archive "${automation.name}"?`}
           text={`It disappears from the list and stops for good${
-            inProgressRuns.data === undefined || inProgressRuns.data.runs.length === 0
-              ? ''
-              : `; ${inProgressRuns.data.runs.length} runs in progress stop`
+            inProgressCount === 0 ? '' : `; ${plural(inProgressCount, 'run')} in progress will stop`
           }. Its runs and analytics stay readable.`}
           onClose={() => setDialog(null)}
           footer={
