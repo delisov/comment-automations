@@ -124,6 +124,11 @@ export type ClockAnswer = {
   service?: { status: number; body: unknown } | { error: string };
 };
 
+export type RestoreAnswer = {
+  ok: true;
+  service: { status: number } | { error: string };
+};
+
 const request = async <T>(method: string, url: string, body?: unknown): Promise<T> => {
   const response = await fetch(url, {
     method,
@@ -146,8 +151,7 @@ export const api = {
   deliveries: () => request<Delivery[]>('GET', '/scenario/deliveries'),
   settings: () => request<Settings>('GET', '/scenario/settings'),
   putSettings: (patch: Partial<Settings>) => request<Settings>('PUT', '/scenario/settings', patch),
-  reset: () => request<{ ok: true }>('POST', '/scenario/reset'),
-  seed: () => request<{ ok: true }>('POST', '/scenario/seed'),
+  restore: () => request<RestoreAnswer>('POST', '/scenario/restore'),
   comment: (body: { postId: string; userId: string; text: string; parentId?: string }) =>
     request<Comment>('POST', '/scenario/comments', body),
   message: (body: { accountId: string; userId: string; text: string }) =>
