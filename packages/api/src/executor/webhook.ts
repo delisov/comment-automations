@@ -86,6 +86,17 @@ const resolvesToPrivate = async (url: string): Promise<boolean> => {
   }
 };
 
+export const webhookHeaders = (
+  creatorHeaders: Record<string, string>,
+  key: string,
+): Record<string, string> => ({
+  'content-type': 'application/json',
+  ...Object.fromEntries(
+    Object.entries(creatorHeaders).filter(([name]) => name.toLowerCase() !== 'x-idempotency-key'),
+  ),
+  'X-Idempotency-Key': key,
+});
+
 const attempt = async (
   deps: Deps,
   step: CallWebhookStep,
@@ -98,7 +109,7 @@ const attempt = async (
     }
     const response = await deps.fetch(step.url, {
       method: step.method,
-      headers: { 'content-type': 'application/json', ...step.headers, 'X-Idempotency-Key': key },
+      headers: webhookHeaders(step.headers, key),
       body: step.method === 'GET' ? undefined : body,
       redirect: 'manual',
       signal: AbortSignal.timeout(TIMEOUT_MS),

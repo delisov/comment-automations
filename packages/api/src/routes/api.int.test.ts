@@ -748,4 +748,58 @@ withDatabase('the automations API on a real database', () => {
       'name must not be empty',
     ]);
   });
+
+  it('answers 404 for path ids containing a NUL byte', async () => {
+    const requests = [
+      { method: 'GET', url: '/automations/%00' },
+      { method: 'GET', url: '/runs/%00' },
+      { method: 'GET', url: '/automations/abc%00' },
+      { method: 'DELETE', url: '/automations/%00' },
+      { method: 'POST', url: '/runs/%00/stop' },
+    ] as const;
+    const statuses = [];
+    for (const request of requests) {
+      statuses.push((await h.app.inject(request)).statusCode);
+    }
+    expect(statuses).toEqual([404, 404, 404, 404, 404]);
+  });
+
+  it('accepts an ingest event and a webhook header whose keys hold NUL or lone surrogates', async () => {
+    const account = await h.seedAccount('instagram', 'ig_acc');
+    const nul = await h.app.inject({
+      method: 'POST',
+      url: '/ingest/events',
+      headers: { 'x-service-token': TOKEN },
+      payload: { events: [{ ...comment(), 'k\u0000': 1 }] },
+    });
+    const surrogate = await h.app.inject({
+      method: 'POST',
+      url: '/ingest/events',
+      headers: { 'x-service-token': TOKEN },
+      payload: { events: [{ ...comment({ eventId: 'evt_2' }), 'k\ud800': 1 }] },
+    });
+    const created = await h.app.inject({
+      method: 'POST',
+      url: '/automations',
+      payload: { accountId: account, name: 'Hook' },
+    });
+    const draft = await h.app.inject({
+      method: 'PUT',
+      url: `/automations/${created.json<AutomationDetail>().id}/draft`,
+      payload: {
+        definition: {
+          ...definition,
+          steps: [
+            {
+              kind: 'call_webhook',
+              url: 'https://example.com/hook',
+              method: 'POST',
+              headers: { 'x\u0000y': 'v' },
+            },
+          ],
+        },
+      },
+    });
+    expect([nul.statusCode, surrogate.statusCode, draft.statusCode]).toEqual([202, 202, 200]);
+  });
 });

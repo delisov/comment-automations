@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isPrivateAddress } from './webhook.js';
+import { isPrivateAddress, webhookHeaders } from './webhook.js';
 
 describe('isPrivateAddress', () => {
   it('refuses loopback, private, link-local, shared and metadata ranges', () => {
@@ -32,5 +32,20 @@ describe('isPrivateAddress', () => {
     expect(open.map((address) => [address, isPrivateAddress(address)])).toEqual(
       open.map((address) => [address, false]),
     );
+  });
+});
+
+describe('webhookHeaders', () => {
+  it('lets the engine idempotency key replace a creator header of any letter case', () => {
+    const headers = new Headers(
+      webhookHeaders(
+        { 'x-idempotency-key': 'creator-a', 'X-IDEMPOTENCY-KEY': 'creator-b', 'x-other': 'kept' },
+        'engine-key',
+      ),
+    );
+    expect([headers.get('x-idempotency-key'), headers.get('x-other')]).toEqual([
+      'engine-key',
+      'kept',
+    ]);
   });
 });
