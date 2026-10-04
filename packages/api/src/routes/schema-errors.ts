@@ -9,6 +9,8 @@ export type SchemaIssuesError = Error & { issues: ValidationIssue[]; validationC
 
 const SHAPE_KEYWORDS = new Set(['anyOf', 'const', 'enum', 'required']);
 
+const NON_BLANK_PATTERN = '\\S';
+
 const ISSUE_ROUTES = new Set(['PUT /automations/:id/draft', 'POST /automations/:id/publish']);
 
 const pathOf = (error: SchemaError): string => {
@@ -25,6 +27,10 @@ const describe = (error: SchemaError): Pick<ValidationIssue, 'code' | 'message'>
       return { code: 'TOO_LONG', message: `is longer than ${error.params.limit} characters` };
     case 'minLength':
       return { code: 'EMPTY', message: 'must not be empty' };
+    case 'pattern':
+      return error.params.pattern === NON_BLANK_PATTERN
+        ? { code: 'EMPTY', message: 'must not be empty' }
+        : { code: 'INVALID', message: 'is not valid' };
     case 'maxItems':
       return { code: 'TOO_MANY', message: `has more than ${error.params.limit} items` };
     case 'minimum':
