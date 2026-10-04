@@ -59,6 +59,37 @@ const messageThenWait = (nudgeThen: 'wait' | 'end'): Definition => ({
   ],
 });
 
+const webhookOnly: Definition = {
+  trigger: {
+    comments: { posts: { kind: 'any' }, keywords: ['pricing'] },
+    onRepeatWhileWaiting: 'supersede',
+  },
+  steps: [
+    {
+      kind: 'call_webhook',
+      method: 'POST',
+      url: 'https://crm.example.com/hooks/leads',
+      headers: {},
+    },
+  ],
+};
+
+const blueskyReminder: Definition = {
+  trigger: {
+    comments: { posts: { kind: 'any' }, keywords: ['pricing'] },
+    onRepeatWhileWaiting: 'supersede',
+  },
+  steps: [
+    { kind: 'send_message', text: 'What is your email?', buttons: [], onUnreachable: 'fail' },
+    {
+      kind: 'wait_for_reply',
+      expect: 'email',
+      giveUpHours: 72,
+      reminder: { afterHours: 24, text: 'Still there?' },
+    },
+  ],
+};
+
 withDatabase('the engine on a real database', () => {
   let h: Harness;
 
@@ -1037,5 +1068,228 @@ withDatabase('the engine on a real database', () => {
       'failed',
       { code: 'MALFORMED_RESPONSE', message: 'The gateway answered outside the contract' },
     ]);
+  });
+
+  it('keeps one run per comment when the comment is redelivered under a new event id', async () => {
+    const account = await h.seedAccount('instagram', 'ig_acc');
+    const { automationId } = await h.createLive(account, instagramFlow);
+
+    await h.ingest([comment()]);
+    await h.drain();
+    expect(await h.ingest([comment({ eventId: 'evt_comment_redelivered' })])).toEqual({
+      accepted: 1,
+      duplicates: 0,
+    });
+    await h.drain();
+
+    const runs = await h.runsOf(automationId);
+    expect(runs.map((run) => run.status)).toEqual(['waiting']);
+    expect(runs[0]!.timeline.at(-1)?.message).toBe(
+      'Ignored a redelivered comment: this run already handles it',
+    );
+    expect(h.gateway.calls.map((call) => call.operation)).toEqual([
+      'replyToComment',
+      'replyToComment',
+    ]);
+  });
+
+  it('takes a reply that arrived while the run was still running as soon as it starts waiting', async () => {
+    const account = await h.seedAccount('instagram', 'ig_acc');
+    const { automationId } = await h.createLive(account, instagramFlow);
+    let release = (): void => undefined;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    h.deps.gateway = {
+      ...h.gateway,
+      replyToComment: async (request) => {
+        await gate;
+        return h.gateway.replyToComment(request);
+      },
+    };
+    try {
+      await h.ingest([comment()]);
+      const ticking = h.tick();
+      await h.ingest([message()]);
+      release();
+      await ticking;
+    } finally {
+      h.deps.gateway = h.gateway;
+    }
+    await h.drain();
+
+    const [run] = await h.runsOf(automationId);
+    expect([run?.status, run?.context.captured]).toEqual([
+      'completed',
+      { email: 'jane@example.com' },
+    ]);
+    expect(run?.timeline.map((entry) => entry.message)).toEqual([
+      'Started from a comment',
+      'Replied to the comment',
+      'Sent the message asking for a reply',
+      'Waiting for a reply · gives up at 2026-10-07T10:00:00.000Z',
+      'Reply received with an email',
+      'Sent the message',
+      'Webhook delivered (200)',
+      'Completed',
+    ]);
+    expect(h.gateway.calls.filter((call) => call.operation === 'sendMessage')).toHaveLength(1);
+  });
+
+  it('stores a batch whose middle event carries a NUL character', async () => {
+    const account = await h.seedAccount('instagram', 'ig_acc');
+    const { automationId } = await h.createLive(account, instagramFlow);
+
+    expect(
+      await h.ingest([
+        comment({ eventId: 'evt_1', commentId: 'c_1', authorId: 'u_a', authorHandle: 'a' }),
+        comment({
+          eventId: 'evt_2',
+          commentId: 'c_2',
+          authorId: 'u_b',
+          authorHandle: 'b\u0000',
+          text: 'pricing\u0000?',
+        }),
+        comment({ eventId: 'evt_3', commentId: 'c_3', authorId: 'u_c', authorHandle: 'c' }),
+      ]),
+    ).toEqual({ accepted: 3, duplicates: 0 });
+    await h.drain();
+
+    const stored = await h.db
+      .selectFrom('events')
+      .select(sql<string>`payload->>'text'`.as('text'))
+      .where('external_event_id', '=', 'evt_2')
+      .executeTakeFirstOrThrow();
+    expect(stored).toEqual({ text: 'pricing?' });
+    const contacts = await h.db.selectFrom('contacts').select('handle').orderBy('handle').execute();
+    expect(contacts).toEqual([{ handle: 'a' }, { handle: 'b' }, { handle: 'c' }]);
+    expect((await h.runsOf(automationId)).map((run) => run.status)).toEqual([
+      'waiting',
+      'waiting',
+      'waiting',
+    ]);
+  });
+
+  it('retries a failing webhook with backoff and fails the run once the budget is spent', async () => {
+    const account = await h.seedAccount('instagram', 'ig_acc');
+    const { automationId } = await h.createLive(account, webhookOnly);
+    h.webhookStatus.value = 500;
+
+    await h.ingest([comment()]);
+    expect(await h.tick()).toBe(1);
+    const [retrying] = await h.runsOf(automationId);
+    expect([retrying?.status, retrying?.timeline.at(-1)?.message]).toEqual([
+      'running',
+      "Webhook failed (500): check the webhook receiver; the run's data was not delivered · retrying in 1 s",
+    ]);
+    for (const wait of [1_000, 5_000, 25_000, 120_000]) {
+      h.clock.advance(wait);
+      expect(await h.tick()).toBe(1);
+    }
+
+    const [failed] = await h.runsOf(automationId);
+    expect([failed?.status, failed?.error, failed?.timeline.at(-1)?.level]).toEqual([
+      'failed',
+      {
+        code: 'WEBHOOK_FAILED',
+        message:
+          "Webhook failed (500): check the webhook receiver; the run's data was not delivered",
+      },
+      'error',
+    ]);
+    expect(h.webhookCalls).toHaveLength(5);
+    const outbound = await h.db.selectFrom('outbound_calls').select(['kind', 'status']).execute();
+    expect(outbound).toEqual([{ kind: 'webhook', status: 'failed' }]);
+  });
+
+  it('treats a redirect and an unreachable receiver as webhook failures to retry', async () => {
+    const account = await h.seedAccount('instagram', 'ig_acc');
+    const redirected = await h.createLive(account, webhookOnly, 'redirected');
+    const unreachable = await h.createLive(
+      account,
+      {
+        ...webhookOnly,
+        trigger: {
+          comments: { posts: { kind: 'any' }, keywords: ['unreachable'] },
+          onRepeatWhileWaiting: 'supersede',
+        },
+      },
+      'unreachable',
+    );
+
+    h.webhookStatus.value = 302;
+    await h.ingest([comment()]);
+    expect(await h.tick()).toBe(1);
+    const fetchFn = h.deps.fetch;
+    h.deps.fetch = async () => {
+      throw new TypeError('fetch failed');
+    };
+    try {
+      await h.ingest([comment({ eventId: 'evt_2', commentId: 'c_2', text: 'unreachable' })]);
+      expect(await h.tick()).toBe(1);
+    } finally {
+      h.deps.fetch = fetchFn;
+    }
+
+    const [redirectedRun] = await h.runsOf(redirected.automationId);
+    const [unreachableRun] = await h.runsOf(unreachable.automationId);
+    expect([redirectedRun?.status, redirectedRun?.timeline.at(-1)?.message]).toEqual([
+      'running',
+      "Webhook failed (302): check the webhook receiver; the run's data was not delivered · retrying in 1 s",
+    ]);
+    expect([unreachableRun?.status, unreachableRun?.timeline.at(-1)?.message]).toEqual([
+      'running',
+      "Webhook failed (unreachable): check the webhook receiver; the run's data was not delivered · retrying in 1 s",
+    ]);
+  });
+
+  it('skips the reminder when the give-up time has already passed', async () => {
+    const account = await h.seedAccount('bluesky', 'bsky_acc');
+    const { automationId } = await h.createLive(account, blueskyReminder);
+
+    await h.ingest([comment({ platform: 'bluesky', accountId: 'bsky_acc' })]);
+    await h.drain();
+    h.clock.advance(72 * HOUR);
+    await h.drain();
+
+    const [run] = await h.runsOf(automationId);
+    expect([run?.status, run?.timeline.map((entry) => entry.message)]).toEqual([
+      'expired',
+      [
+        'Started from a comment',
+        'Sent the message asking for a reply',
+        'Waiting for a reply · gives up at 2026-10-07T10:00:00.000Z',
+        'Gave up waiting for a reply',
+      ],
+    ]);
+    expect(h.gateway.calls).toHaveLength(1);
+  });
+
+  it('expires the run instead of resuming it when the reply lands after the give-up time', async () => {
+    const account = await h.seedAccount('instagram', 'ig_acc');
+    const { automationId } = await h.createLive(account, {
+      ...messageThenWait('wait'),
+      trigger: { ...messageThenWait('wait').trigger, messages: { keywords: ['email'] } },
+    });
+    await h.ingest([comment()]);
+    await h.drain();
+
+    h.clock.advance(72 * HOUR + 60_000);
+    await h.ingest([
+      message({ text: 'my email is jane@example.com', createdAt: h.clock.now().toISOString() }),
+    ]);
+    const [expired] = await h.runsOf(automationId);
+    expect([expired?.status, expired?.timeline.at(-1)?.message]).toEqual([
+      'expired',
+      'Gave up waiting for a reply',
+    ]);
+    await h.drain();
+
+    const runs = await h.runsOf(automationId);
+    expect(runs.map((run) => [run.status, run.timeline.at(-1)?.message])).toEqual([
+      ['expired', 'Gave up waiting for a reply'],
+      ['waiting', 'Waiting for a reply · gives up at 2026-10-10T10:01:00.000Z'],
+    ]);
+    expect(h.gateway.calls).toHaveLength(2);
   });
 });

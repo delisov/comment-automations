@@ -25,7 +25,8 @@ export type AccountStatus = 'connected' | 'disconnected';
 
 export type AutomationState = 'draft' | 'live' | 'archived';
 
-export type RunStatus = 'running' | 'waiting' | 'completed' | 'failed' | 'expired' | 'superseded';
+export type RunStatus =
+  'running' | 'waiting' | 'completed' | 'failed' | 'expired' | 'superseded' | 'stopped';
 
 export type JobKind = 'advance' | 'reminder' | 'give_up' | 'nudge';
 
@@ -101,6 +102,7 @@ export type RunsTable = {
   account_id: AccountId;
   contact_id: ContactId;
   trigger_event_id: EventId;
+  comment_id: CommentId | null;
   status: RunStatus;
   step_index: number;
   context: Json<RunContext>;

@@ -14,6 +14,7 @@ export const statusLabel: Record<RunStatus, string> = {
   failed: 'Failed',
   expired: 'Expired',
   superseded: 'Superseded',
+  stopped: 'Stopped',
 };
 
 export const statusTone: Record<RunStatus, PillTone> = {
@@ -23,6 +24,7 @@ export const statusTone: Record<RunStatus, PillTone> = {
   failed: 'bad',
   expired: 'plain',
   superseded: 'plain',
+  stopped: 'plain',
 };
 
 const entryTone = (entry: RunLogEntry, status: RunStatus, last: boolean): string => {
@@ -35,7 +37,7 @@ const entryTone = (entry: RunLogEntry, status: RunStatus, last: boolean): string
   if (last && (status === 'waiting' || status === 'running')) {
     return 'wait';
   }
-  if (last && (status === 'expired' || status === 'superseded')) {
+  if (last && (status === 'expired' || status === 'superseded' || status === 'stopped')) {
     return 'mute';
   }
   return 'ok';

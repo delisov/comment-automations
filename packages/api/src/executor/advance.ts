@@ -1,7 +1,7 @@
 import type { RunId, SendMessageStep, Step, WaitForReplyStep } from '@comment-automations/shared';
 import { canRemindBeforeReply } from '@comment-automations/shared';
 import type { Db, RunContext, RunError } from '../db/types.js';
-import { json } from '../db/types.js';
+import { pendingReply, resumeWaitingRun } from '../runs/resume.js';
 import type { LoadedRun } from '../runs/store.js';
 import {
   enqueueJob,
@@ -168,6 +168,11 @@ const waitForReply = async (
         reminderAt: reminderAt?.toISOString() ?? null,
       },
     });
+    const reply = await pendingReply(trx, loaded);
+    const waiting = reply === undefined ? undefined : await loadRun(trx, runId);
+    if (reply !== undefined && waiting !== undefined) {
+      await resumeWaitingRun(deps, trx, waiting, reply);
+    }
   });
   return { kind: 'wait' };
 };
@@ -231,32 +236,4 @@ export const advance = async (deps: Deps, runId: RunId): Promise<JobOutcome> => 
         return outcome;
     }
   }
-};
-
-export const resumeFromWait = async (
-  db: Db,
-  loaded: LoadedRun,
-  context: RunContext,
-  now: Date,
-): Promise<void> => {
-  await db
-    .updateTable('runs')
-    .set({
-      status: 'running',
-      step_index: loaded.run.step_index + 1,
-      context: json(context),
-      wait_until: null,
-      reminder_at: null,
-      updated_at: now,
-    })
-    .where('id', '=', loaded.run.id)
-    .where('status', '=', 'waiting')
-    .execute();
-  await db
-    .updateTable('jobs')
-    .set({ status: 'done' })
-    .where('run_id', '=', loaded.run.id)
-    .where('status', '=', 'pending')
-    .execute();
-  await enqueueJob(db, 'advance', loaded.run.id, now);
 };

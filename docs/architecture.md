@@ -132,11 +132,12 @@ events              id, platform, account_id, external_event_id, kind, payload j
                     UNIQUE (platform, external_event_id)                                     -- HD-011
 contacts            id, platform, account_id, external_id, handle, email NULL, updated_at
                     UNIQUE (platform, account_id, external_id)
-runs                id, automation_id, version_id, account_id, contact_id, trigger_event_id,
-                    status ('running'|'waiting'|'completed'|'failed'|'expired'|'superseded'),
+runs                id, automation_id, version_id, account_id, contact_id, trigger_event_id, comment_id NULL,
+                    status ('running'|'waiting'|'completed'|'failed'|'expired'|'superseded'|'stopped'),
                     step_index, context jsonb, wait_until NULL, reminder_at NULL, reminder_sent bool, nudged bool,
                     error jsonb NULL, started_at, finished_at NULL, updated_at
                     UNIQUE (automation_id, contact_id) WHERE status IN ('running','waiting')  -- HD-009
+                    UNIQUE (automation_id, comment_id) WHERE comment_id IS NOT NULL           -- one run per comment (AD-022)
 run_logs            id, run_id, step_index NULL, level, message, context jsonb, at
 outbound_calls      id, run_id, idempotency_key UNIQUE, kind, request jsonb, response jsonb, status, at
 jobs                id, kind ('advance'|'reminder'|'give_up'|'nudge'), run_id, run_at, attempts, locked_until NULL, status
@@ -147,20 +148,22 @@ Context jsonb on a run: `{ commentId?, postId?, conversationId?, lastInboundAt, 
 
 ## 6. Execution
 
-1. **Ingest.** Verify token. Insert each event; a unique-violation is a duplicate and is counted, not processed.
+1. **Ingest.** Verify token. Strip U+0000 from every string of the event. Insert each event; a unique-violation is a duplicate and is counted, not processed.
 2. **Match.** For a comment event: live automations on that account whose comment trigger matches post and keywords. For a message event: first, a waiting run for (account, contact) resumes (section 7); otherwise live automations with a message trigger that matches.
-3. **Start a run.** Inside one transaction: if a waiting run exists for (automation, contact) and `onRepeatWhileWaiting = supersede`, mark it `superseded`; insert the new run at step 0 with `status='running'`; enqueue `advance`.
+3. **Start a run.** Inside one transaction: if a run of this automation already carries the comment's id (the comment was redelivered under a new event id), log "Ignored a redelivered comment" on that run and stop; if a waiting run exists for (automation, contact) and `onRepeatWhileWaiting = supersede`, mark it `superseded`; insert the new run at step 0 with `status='running'` and `comment_id`; enqueue `advance`.
 4. **Advance.** Execute steps from `step_index`:
    - `reply_to_comment`: check `privateReply`/`publicReply` windows from the record and the comment's `createdAt`; call the gateway with an idempotency key; log; on `ALREADY_REPLIED` or `REPLY_WINDOW_CLOSED` → fail (non-retryable); on `RATE_LIMITED` → requeue with backoff.
    - `send_message`: if the record says the commenter is messageable only via private reply and no conversation exists yet → send as a private reply to the comment (this is how the first message on Instagram and Facebook goes out); otherwise send to the conversation, checking the conversation window from `lastInboundAt`; `RECIPIENT_UNREACHABLE` → apply `onUnreachable`.
-   - `wait_for_reply`: set `waiting`, `wait_until = now + giveUpHours`, `reminder_at = now + afterHours` only if `canRemindBeforeReply(record)`, enqueue `give_up` and `reminder` jobs; stop.
-   - `call_webhook`: POST JSON `{ automation, version, run, contact, captured }`; the hostname must not resolve to a private, loopback, link-local or cloud-metadata address (AD-019); redirects are not followed; 10 s timeout; one retry; non-2xx logged; the run completes.
+   - `wait_for_reply`: set `waiting`, `wait_until = now + giveUpHours`, `reminder_at = now + afterHours` only if `canRemindBeforeReply(record)`, enqueue `give_up` and `reminder` jobs; then, in the same transaction, the latest message from the contact stored since the run started that no run consumed (not a trigger event, newer than `lastInboundAt`) is processed as the reply (section 7); stop.
+   - `call_webhook`: POST JSON `{ automation, version, run, contact, captured }`; the hostname must not resolve to a private, loopback, link-local or cloud-metadata address (AD-019); redirects are not followed; 10 s timeout. A non-2xx answer (3xx included) or a network error is a retryable step failure on the job's attempt budget with backoff; once spent the run fails with `WEBHOOK_FAILED`, the status code in the log line and the action "check the webhook receiver; the run's data was not delivered". A refused private address is logged and the run goes on.
    - End of steps → `completed`.
-5. **Timers.** Each timer locks the run row (`FOR UPDATE`) and re-checks `status = 'waiting'` before acting; every status transition is conditional on the status it leaves (AD-019). `reminder`: if still waiting and not replied and not yet sent → send reminder text through the message path, mark sent; out of retries → log "Reminder could not be sent", the run keeps waiting. `give_up`: if still waiting → `expired`.
+5. **Timers.** Each timer locks the run row (`FOR UPDATE`) and re-checks `status = 'waiting'` before acting; every status transition is conditional on the status it leaves (AD-019). `reminder`: if still waiting, not replied, not yet sent and `now < wait_until` → send reminder text through the message path, mark sent; once `now >= wait_until` it does nothing and logs nothing; out of retries → log "Reminder could not be sent", the run keeps waiting. `give_up`: if still waiting → `expired`.
+6. **Stopping.** `POST /runs/:id/stop` and `DELETE /automations/:id` (archive) move every `running` or `waiting` run to `stopped` with the log line "Stopped by the user" or "Stopped because the automation was archived"; `stopped` counts as neither completed nor expired.
+7. **Automations API.** `POST /automations` creates the draft with the first trigger `allowedTriggers(record)` allows (messages where the platform delivers no comments). `POST /automations/:id/publish` runs inside one transaction that locks the automation row (`SELECT ... FOR UPDATE`), so an overlapping draft save lands before or after it, never underneath; a live automation without a draft answers 409; a `specific` post is checked against the gateway's post listing and an unknown one answers 422 `POST_NOT_FOUND` on `trigger.comments.posts.postId`. An empty `application/json` body parses as `{}`; malformed JSON still answers 400.
 
 ## 7. Resuming a waiting run
 
-An inbound message from the contact while a run is `waiting`: update `lastInboundAt`, `replied=true`. If `expect='email'`: extract the first email; found → store in `context.captured.email` and on the contact, advance; not found → if not yet nudged, enqueue a `nudge` job that sends the nudge text and sets `nudged=true` once the send succeeds (stay waiting), else if `then='end'` → `expired`, else stay waiting. If `expect='any'` → advance.
+An inbound message from the contact while a run is `waiting`: if `wait_until` is already past, the run becomes `expired` with the give-up log line and the message goes on to matching as if the give-up had run; otherwise update `lastInboundAt`, `replied=true`. If `expect='email'`: extract the first email; found → store in `context.captured.email` and on the contact, advance; not found → if not yet nudged, enqueue a `nudge` job that sends the nudge text and sets `nudged=true` once the send succeeds (stay waiting), else if `then='end'` → `expired`, else stay waiting. If `expect='any'` → advance.
 
 ## 8. The stand (schema `stand`)
 

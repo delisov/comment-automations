@@ -17,24 +17,39 @@ import {
   ValidationIssue,
   VersionSummary as VersionSummarySchema,
 } from '@comment-automations/api-schema';
-import type { AutomationId, Definition } from '@comment-automations/shared';
-import { capabilities, validateDefinition } from '@comment-automations/shared';
+import type { AutomationId, Definition, Platform } from '@comment-automations/shared';
+import { allowedTriggers, capabilities, validateDefinition } from '@comment-automations/shared';
 import { Type } from '@sinclair/typebox';
 import type { FastifyReply } from 'fastify';
 import { analytics, automationStats } from '../analytics/queries.js';
 import type { Db } from '../db/types.js';
 import { json } from '../db/types.js';
+import { ACTIVE_STATUSES, finishRun } from '../runs/store.js';
 import { listRuns } from './runs.js';
 import { triggerSummary } from './trigger-summary.js';
 import type { App, AppDeps } from './types.js';
 import { ErrorResponse, IdParams, iso } from './types.js';
 
-const EMPTY_DEFINITION: Definition = {
+const initialDefinition = (platform: Platform): Definition => ({
   trigger: {
-    comments: { posts: { kind: 'any' }, keywords: [] },
+    ...(allowedTriggers(capabilities[platform]).comments
+      ? { comments: { posts: { kind: 'any' }, keywords: [] } }
+      : { messages: { keywords: [] } }),
     onRepeatWhileWaiting: 'supersede',
   },
   steps: [],
+});
+
+const NOTHING_TO_PUBLISH: ValidationIssue = {
+  path: '',
+  code: 'NOTHING_TO_PUBLISH',
+  message: 'There is no draft to publish',
+};
+
+const POST_NOT_FOUND: ValidationIssue = {
+  path: 'trigger.comments.posts.postId',
+  code: 'POST_NOT_FOUND',
+  message: 'This post is not on the account',
 };
 
 const IssuesResponse = Type.Object({ issues: Type.Array(ValidationIssue) });
@@ -56,11 +71,22 @@ const automationRows = (db: Db) =>
       'automations.active_version_id',
       'automations.draft',
       'accounts.platform',
+      'accounts.external_id as account_external_id',
       'active.number as active_number',
       'active.definition as active_definition',
     ]);
 
 type AutomationRow = Awaited<ReturnType<ReturnType<typeof automationRows>['execute']>>[number];
+
+const lockAutomation = async (trx: Db, id: AutomationId): Promise<AutomationRow | undefined> => {
+  await trx.selectFrom('automations').select('id').where('id', '=', id).forUpdate().execute();
+  return automationRows(trx).where('automations.id', '=', id).executeTakeFirst();
+};
+
+type PublishOutcome =
+  | { status: 404 | 409 | 502; error: string }
+  | { status: 422; issues: ValidationIssue[] }
+  | { status: 200; version: VersionSummary };
 
 const versionsOf = async (db: Db, automation: AutomationRow): Promise<VersionSummary[]> => {
   const rows = await db
@@ -141,7 +167,7 @@ export const registerAutomationRoutes = (app: App, deps: AppDeps): void => {
     async (request, reply) => {
       const account = await db
         .selectFrom('accounts')
-        .select('id')
+        .select(['id', 'platform'])
         .where('id', '=', request.body.accountId)
         .executeTakeFirst();
       if (account === undefined) {
@@ -155,7 +181,7 @@ export const registerAutomationRoutes = (app: App, deps: AppDeps): void => {
           name: request.body.name,
           state: 'draft',
           active_version_id: null,
-          draft: json(EMPTY_DEFINITION),
+          draft: json(initialDefinition(account.platform)),
           created_at: now,
           updated_at: now,
         })
@@ -215,41 +241,54 @@ export const registerAutomationRoutes = (app: App, deps: AppDeps): void => {
           404: ErrorResponse,
           409: ErrorResponse,
           422: IssuesResponse,
+          502: ErrorResponse,
         },
       },
     },
     async (request, reply) => {
       const id = request.params.id as AutomationId;
       const now = deps.clock.now();
-      const row = await automationRows(db).where('automations.id', '=', id).executeTakeFirst();
-      if (row === undefined) {
-        return notFound(reply);
-      }
-      if (row.state === 'archived') {
-        return reply.status(409).send({ error: 'An archived automation cannot be published' });
-      }
-      if (row.draft === null) {
-        if (row.active_version_id === null) {
-          return reply.status(422).send({
-            issues: [
-              { path: '', code: 'NOTHING_TO_PUBLISH', message: 'There is no draft to publish' },
-            ],
-          });
+      const outcome = await db.transaction().execute(async (trx): Promise<PublishOutcome> => {
+        const row = await lockAutomation(trx, id);
+        if (row === undefined) {
+          return { status: 404, error: 'Automation not found' };
         }
-        await db
-          .updateTable('automations')
-          .set({ state: 'live', updated_at: now })
-          .where('id', '=', id)
-          .execute();
-        const versions = await versionsOf(db, row);
-        return { version: versions.find((version) => version.isActive)! };
-      }
-      const draft = row.draft;
-      const issues = validateDefinition(draft, capabilities[row.platform]);
-      if (issues.length > 0) {
-        return reply.status(422).send({ issues });
-      }
-      const version = await db.transaction().execute(async (trx) => {
+        if (row.state === 'archived') {
+          return { status: 409, error: 'An archived automation cannot be published' };
+        }
+        if (row.draft === null) {
+          if (row.active_version_id === null) {
+            return { status: 422, issues: [NOTHING_TO_PUBLISH] };
+          }
+          if (row.state === 'live') {
+            return {
+              status: 409,
+              error: 'Nothing to publish: the automation is live without a draft',
+            };
+          }
+          await trx
+            .updateTable('automations')
+            .set({ state: 'live', updated_at: now })
+            .where('id', '=', id)
+            .execute();
+          const versions = await versionsOf(trx, row);
+          return { status: 200, version: versions.find((version) => version.isActive)! };
+        }
+        const draft = row.draft;
+        const issues = validateDefinition(draft, capabilities[row.platform]);
+        if (issues.length > 0) {
+          return { status: 422, issues };
+        }
+        const posts = draft.trigger.comments?.posts;
+        if (posts?.kind === 'specific') {
+          const listed = await deps.gateway.listPosts(row.account_external_id);
+          if (!listed.ok) {
+            return { status: 502, error: 'The gateway could not list the posts' };
+          }
+          if (!listed.value.some((post) => post.postId === posts.postId)) {
+            return { status: 422, issues: [POST_NOT_FOUND] };
+          }
+        }
         const { max } = await trx
           .selectFrom('automation_versions')
           .select((eb) => eb.fn.max('number').as('max'))
@@ -271,18 +310,30 @@ export const registerAutomationRoutes = (app: App, deps: AppDeps): void => {
           .set({ active_version_id: inserted.id, state: 'live', draft: null, updated_at: now })
           .where('id', '=', id)
           .execute();
-        return inserted;
+        return {
+          status: 200,
+          version: {
+            id: inserted.id,
+            number: inserted.number,
+            note: inserted.note,
+            publishedAt: iso(inserted.published_at),
+            isActive: true,
+            definition: inserted.definition,
+          },
+        };
       });
-      return {
-        version: {
-          id: version.id,
-          number: version.number,
-          note: version.note,
-          publishedAt: iso(version.published_at),
-          isActive: true,
-          definition: version.definition,
-        },
-      };
+      switch (outcome.status) {
+        case 200:
+          return { version: outcome.version };
+        case 404:
+          return reply.status(404).send({ error: outcome.error });
+        case 409:
+          return reply.status(409).send({ error: outcome.error });
+        case 422:
+          return reply.status(422).send({ issues: outcome.issues });
+        case 502:
+          return reply.status(502).send({ error: outcome.error });
+      }
     },
   );
 
@@ -377,12 +428,30 @@ export const registerAutomationRoutes = (app: App, deps: AppDeps): void => {
     '/automations/:id',
     { schema: { params: IdParams, response: { 204: Type.Null(), 404: ErrorResponse } } },
     async (request, reply) => {
-      const result = await db
-        .updateTable('automations')
-        .set({ state: 'archived', updated_at: deps.clock.now() })
-        .where('id', '=', request.params.id as AutomationId)
-        .executeTakeFirst();
-      if (result.numUpdatedRows === 0n) {
+      const id = request.params.id as AutomationId;
+      const now = deps.clock.now();
+      const archived = await db.transaction().execute(async (trx) => {
+        const result = await trx
+          .updateTable('automations')
+          .set({ state: 'archived', updated_at: now })
+          .where('id', '=', id)
+          .executeTakeFirst();
+        const active = await trx
+          .selectFrom('runs')
+          .select(['id', 'step_index'])
+          .where('automation_id', '=', id)
+          .where('status', 'in', ACTIVE_STATUSES)
+          .forUpdate()
+          .execute();
+        for (const run of active) {
+          await finishRun(trx, run.id, 'stopped', now, {
+            stepIndex: run.step_index,
+            message: 'Stopped because the automation was archived',
+          });
+        }
+        return result.numUpdatedRows > 0n;
+      });
+      if (!archived) {
         return notFound(reply);
       }
       return reply.status(204).send(null);
