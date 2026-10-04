@@ -5,6 +5,7 @@ import {
   allowedStepKinds,
   allowedTriggers,
   canRemindBeforeReply,
+  consecutiveMessageCapReached,
   deliveredAsPrivateReply,
   nextAllowedStepKinds,
   requiresUnreachableChoice,
@@ -95,7 +96,7 @@ const stepOfKind = (
           ),
         })
         .chain((step) =>
-          canRemindBeforeReply(record)
+          canRemindBeforeReply(record) && !consecutiveMessageCapReached(record, stepsSoFar)
             ? fc
                 .option(
                   fc.record({
@@ -135,7 +136,7 @@ const stepsFrom = (
 
 const buildableDefinition = (record: CapabilityRecord): fc.Arbitrary<Definition> =>
   fc
-    .tuple(triggerFor(record), fc.nat({ max: 6 }))
+    .tuple(triggerFor(record), fc.integer({ min: 1, max: 6 }))
     .chain(([trigger, length]) =>
       stepsFrom(record, trigger, [], length).map((steps) => ({ trigger, steps })),
     );
