@@ -1,9 +1,12 @@
+import type { CapabilityRecord } from './capabilities.js';
+import { EMAIL_MAX_CHARS } from './email.js';
+
 export type TemplateVars = { email?: string; contactHandle?: string };
 
-export const longestTemplateVars: Required<TemplateVars> = {
-  email: 'a'.repeat(254),
-  contactHandle: 'a'.repeat(30),
-};
+export const longestTemplateVars = (record: CapabilityRecord): Required<TemplateVars> => ({
+  email: 'a'.repeat(EMAIL_MAX_CHARS),
+  contactHandle: 'a'.repeat(record.handleMaxChars),
+});
 
 const PLACEHOLDER = /\{\{\s*(email|contact\.handle)\s*\}\}/g;
 

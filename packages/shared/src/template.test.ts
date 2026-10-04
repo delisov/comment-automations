@@ -1,5 +1,21 @@
 import { describe, expect, it } from 'vitest';
-import { renderTemplate } from './template.js';
+import { PLATFORMS } from './platform.js';
+import { capabilities } from './platforms/index.js';
+import { longestTemplateVars, renderTemplate } from './template.js';
+
+describe('longestTemplateVars', () => {
+  it('takes the longest handle from the record and the longest email from the extractor cap', () => {
+    expect(longestTemplateVars(capabilities.bluesky)).toEqual({
+      email: 'a'.repeat(254),
+      contactHandle: 'a'.repeat(64),
+    });
+    expect(longestTemplateVars(capabilities.instagram).contactHandle).toHaveLength(31);
+    for (const platform of PLATFORMS) {
+      const record = capabilities[platform];
+      expect(longestTemplateVars(record).contactHandle).toHaveLength(record.handleMaxChars);
+    }
+  });
+});
 
 describe('renderTemplate', () => {
   it('fills email and contact handle', () => {
