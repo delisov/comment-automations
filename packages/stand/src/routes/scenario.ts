@@ -7,6 +7,7 @@ import type { Context } from '../context.js';
 import type { Database } from '../db/database.js';
 import { newId } from '../ids.js';
 import { resetWorlds, seedWorlds } from '../seed.js';
+import { forwardClock } from './clock.js';
 import {
   addMessage,
   commentEvent,
@@ -61,6 +62,15 @@ export const scenarioRoutes: FastifyPluginAsyncTypebox<{ ctx: Context }> = async
     await resetWorlds(db);
     await seedWorlds(db, clock.now());
     return { ok: true };
+  });
+
+  app.post('/restore', async () => {
+    const now = new Date();
+    clock.set(now);
+    await resetWorlds(db);
+    await seedWorlds(db, now);
+    const answer = await forwardClock(ctx, { now: now.toISOString() });
+    return { ok: true, service: 'error' in answer ? answer : { status: answer.status } };
   });
 
   app.post(
