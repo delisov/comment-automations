@@ -1,8 +1,15 @@
 import type { Definition } from '@comment-automations/shared';
+import { sql } from 'kysely';
 import { afterAll, beforeAll, beforeEach, expect, it } from 'vitest';
+import type { RunContext } from './db/types.js';
 import { json } from './db/types.js';
+import { giveUp } from './executor/timers.js';
+import { httpGateway } from './gateway/http.js';
+import { ingestEvents } from './ingest/process.js';
+import { liveAutomations, startRun } from './runs/start.js';
 import type { Harness } from './testing/harness.js';
 import { START, comment, createHarness, message, withDatabase } from './testing/harness.js';
+import { LOCK_MS, claimJob } from './worker/worker.js';
 
 const HOUR = 60 * 60 * 1000;
 
@@ -518,6 +525,7 @@ withDatabase('the engine on a real database', () => {
     await h.ingest([comment()]);
     await h.drain();
     await h.ingest([message({ text: 'why?' })]);
+    await h.drain();
     await h.ingest([message({ eventId: 'evt_message_2', messageId: 'm_2', text: 'still why?' })]);
     await h.drain();
 
@@ -662,5 +670,372 @@ withDatabase('the engine on a real database', () => {
       },
     ]);
     expect(h.gateway.calls).toHaveLength(1);
+  });
+
+  it('leaves a claimed job to its worker until the lock expires, then reclaims it', async () => {
+    const account = await h.seedAccount('instagram', 'ig_acc');
+    const { automationId } = await h.createLive(account, messageThenWait('wait'));
+    await h.ingest([comment()]);
+
+    const claimed = await claimJob(h.deps, h.clock.now());
+    expect([claimed?.kind, claimed?.attempts]).toEqual(['advance', 1]);
+    expect(await h.tick()).toBe(0);
+    h.clock.advance(LOCK_MS - 1);
+    expect(await h.tick()).toBe(0);
+    expect((await h.runsOf(automationId))[0]?.status).toBe('running');
+
+    h.clock.advance(2);
+    expect(await h.tick()).toBe(1);
+    const jobs = await h.db
+      .selectFrom('jobs')
+      .select(['kind', 'status', 'attempts', 'locked_until'])
+      .orderBy('run_at')
+      .execute();
+    expect(jobs).toEqual([
+      { kind: 'advance', status: 'done', attempts: 2, locked_until: null },
+      { kind: 'give_up', status: 'pending', attempts: 0, locked_until: null },
+    ]);
+    expect((await h.runsOf(automationId))[0]?.status).toBe('waiting');
+  });
+
+  it('fails a run whose job keeps being interrupted instead of reclaiming it forever', async () => {
+    const account = await h.seedAccount('instagram', 'ig_acc');
+    const { automationId } = await h.createLive(account, messageThenWait('wait'));
+    await h.ingest([comment()]);
+
+    for (let i = 0; i < 5; i += 1) {
+      expect((await claimJob(h.deps, h.clock.now()))?.attempts).toBe(i + 1);
+      h.clock.advance(LOCK_MS + 1);
+    }
+    expect(await h.tick()).toBe(1);
+
+    const [run] = await h.runsOf(automationId);
+    expect([run?.status, run?.error]).toEqual([
+      'failed',
+      { code: 'INTERNAL', message: 'The step was interrupted too many times' },
+    ]);
+    expect(h.gateway.calls).toEqual([]);
+  });
+
+  it('starts exactly one active run when the same contact comments twice at once', async () => {
+    const account = await h.seedAccount('instagram', 'ig_acc');
+    const { automationId } = await h.createLive(account, instagramFlow);
+
+    const outcomes = await Promise.all([
+      ingestEvents(h.deps, [comment()]),
+      ingestEvents(h.deps, [comment({ eventId: 'evt_comment_2', commentId: 'c_2' })]),
+    ]);
+
+    expect(outcomes).toEqual([
+      { accepted: 1, duplicates: 0 },
+      { accepted: 1, duplicates: 0 },
+    ]);
+    const runs = await h.runsOf(automationId);
+    expect(runs.map((run) => run.status).sort()).toEqual(['running', 'superseded']);
+  });
+
+  it('keeps one active run when two transactions insert a run for the same contact at once', async () => {
+    const account = await h.seedAccount('instagram', 'ig_acc');
+    const { automationId } = await h.createLive(account, instagramFlow);
+    const [automation] = await liveAutomations(h.db, account);
+    const contact = await h.db
+      .insertInto('contacts')
+      .values({
+        platform: 'instagram',
+        account_id: account,
+        external_id: 'u_jane',
+        handle: 'jane',
+        updated_at: START,
+      })
+      .returning('id')
+      .executeTakeFirstOrThrow();
+    const event = (eventId: string) =>
+      h.db
+        .insertInto('events')
+        .values({
+          platform: 'instagram',
+          account_id: 'ig_acc',
+          external_event_id: eventId,
+          kind: 'comment',
+          payload: json(comment({ eventId })),
+          received_at: START,
+        })
+        .returning('id')
+        .executeTakeFirstOrThrow();
+    const first = await event('evt_1');
+    const second = await event('evt_2');
+    const context: RunContext = { captured: {}, replied: false };
+    const start = (trx: typeof h.db, triggerEventId: typeof first.id) =>
+      startRun(trx, {
+        automation: automation!,
+        accountId: account,
+        contactId: contact.id,
+        triggerEventId,
+        context,
+        startedFrom: 'comment',
+        now: START,
+      });
+    let release = (): void => undefined;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let inserted = (): void => undefined;
+    const firstInserted = new Promise<void>((resolve) => {
+      inserted = resolve;
+    });
+
+    const a = h.db.transaction().execute(async (trx) => {
+      const id = await start(trx, first.id);
+      inserted();
+      await gate;
+      return id;
+    });
+    await firstInserted;
+    const b = h.db.transaction().execute((trx) => start(trx, second.id));
+    const blockedOnInsert = async (): Promise<boolean> => {
+      const { rows } = await sql<{ n: number }>`
+        select count(*)::int as n from pg_stat_activity
+        where wait_event_type = 'Lock' and query like 'insert into "app"."runs"%'
+      `.execute(h.db);
+      return rows[0]!.n > 0;
+    };
+    for (let i = 0; i < 100 && !(await blockedOnInsert()); i += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+    release();
+    const [idA, idB] = await Promise.all([a, b]);
+
+    const runs = await h.runsOf(automationId);
+    expect(Object.fromEntries(runs.map((run) => [run.id, run.status]))).toEqual({
+      [idA!]: 'superseded',
+      [idB!]: 'running',
+    });
+  });
+
+  it('does not expire a run whose reply landed while the give-up job was in flight', async () => {
+    const account = await h.seedAccount('instagram', 'ig_acc');
+    const { automationId } = await h.createLive(account, messageThenWait('wait'));
+    await h.ingest([comment()]);
+    await h.drain();
+
+    h.clock.advance(72 * HOUR);
+    const job = await claimJob(h.deps, h.clock.now());
+    expect(job?.kind).toBe('give_up');
+    await h.ingest([message({ createdAt: h.clock.now().toISOString() })]);
+    expect(await giveUp(h.deps, job!.run_id)).toEqual({ kind: 'done' });
+    await h.drain();
+
+    const [run] = await h.runsOf(automationId);
+    expect([run?.status, run?.context.captured]).toEqual([
+      'completed',
+      { email: 'jane@example.com' },
+    ]);
+    expect(run?.timeline.map((entry) => entry.message)).toEqual([
+      'Started from a comment',
+      'Sent the message asking for a reply',
+      'Waiting for a reply · gives up at 2026-10-07T10:00:00.000Z',
+      'Reply received with an email',
+      'Completed',
+    ]);
+  });
+
+  it('starts a new run when the reply lands after the give-up committed', async () => {
+    const account = await h.seedAccount('instagram', 'ig_acc');
+    const { automationId } = await h.createLive(account, {
+      ...messageThenWait('wait'),
+      trigger: { ...messageThenWait('wait').trigger, messages: { keywords: ['email'] } },
+    });
+    await h.ingest([comment()]);
+    await h.drain();
+
+    h.clock.advance(72 * HOUR);
+    expect(await h.tick()).toBe(1);
+    await h.ingest([
+      message({ text: 'my email is jane@example.com', createdAt: h.clock.now().toISOString() }),
+    ]);
+    await h.drain();
+
+    const runs = await h.runsOf(automationId);
+    expect(runs.map((run) => [run.status, run.timeline.at(-1)?.message])).toEqual([
+      ['expired', 'Gave up waiting for a reply'],
+      ['waiting', 'Waiting for a reply · gives up at 2026-10-10T10:00:00.000Z'],
+    ]);
+  });
+
+  it('asks once more through a job and marks the run nudged only once the send succeeds', async () => {
+    const account = await h.seedAccount('instagram', 'ig_acc');
+    const { automationId } = await h.createLive(account, messageThenWait('wait'));
+    await h.ingest([comment()]);
+    await h.drain();
+    h.gateway.answer('sendMessage', {
+      ok: false,
+      error: { code: 'RATE_LIMITED', message: 'slow down', retryable: true },
+    });
+    const nudged = () =>
+      h.db
+        .selectFrom('runs')
+        .select('nudged')
+        .executeTakeFirstOrThrow()
+        .then((row) => row.nudged);
+    const nudgeJobs = () =>
+      h.db.selectFrom('jobs').select(['status', 'attempts']).where('kind', '=', 'nudge').execute();
+
+    await h.ingest([message({ text: 'why?' })]);
+    expect([await nudged(), await nudgeJobs()]).toEqual([
+      false,
+      [{ status: 'pending', attempts: 0 }],
+    ]);
+    expect(await h.tick()).toBe(1);
+    expect([await nudged(), await nudgeJobs()]).toEqual([
+      false,
+      [{ status: 'pending', attempts: 1 }],
+    ]);
+    const [retrying] = await h.runsOf(automationId);
+    expect([retrying?.status, retrying?.timeline.at(-1)?.message]).toEqual([
+      'waiting',
+      'The platform rate-limited this account · retrying in 1 s',
+    ]);
+
+    h.clock.advance(1_000);
+    expect(await h.tick()).toBe(1);
+    expect([await nudged(), await nudgeJobs()]).toEqual([true, [{ status: 'done', attempts: 2 }]]);
+    const [run] = await h.runsOf(automationId);
+    expect([run?.status, run?.timeline.at(-1)?.message]).toEqual(['waiting', 'Asked once more']);
+    expect(h.gateway.calls.map((call) => call.request)).toEqual([
+      {
+        accountId: 'ig_acc',
+        commentId: 'c_1',
+        text: 'What is your email?',
+        visibility: 'private',
+        idempotencyKey: `${run!.id}:0:message`,
+      },
+      {
+        accountId: 'ig_acc',
+        recipient: { conversationId: 'conv_c_1' },
+        text: 'Could you send the email once more?',
+        idempotencyKey: `${run!.id}:1:nudge`,
+      },
+      {
+        accountId: 'ig_acc',
+        recipient: { conversationId: 'conv_c_1' },
+        text: 'Could you send the email once more?',
+        idempotencyKey: `${run!.id}:1:nudge`,
+      },
+    ]);
+  });
+
+  it('leaves the run waiting when the reminder runs out of retries', async () => {
+    const account = await h.seedAccount('bluesky', 'bsky_acc');
+    const { automationId } = await h.createLive(account, {
+      trigger: {
+        comments: { posts: { kind: 'any' }, keywords: ['pricing'] },
+        onRepeatWhileWaiting: 'supersede',
+      },
+      steps: [
+        { kind: 'send_message', text: 'What is your email?', buttons: [], onUnreachable: 'fail' },
+        {
+          kind: 'wait_for_reply',
+          expect: 'email',
+          giveUpHours: 72,
+          reminder: { afterHours: 24, text: 'Still there?' },
+        },
+      ],
+    });
+    await h.ingest([comment({ platform: 'bluesky', accountId: 'bsky_acc' })]);
+    await h.drain();
+    for (let i = 0; i < 5; i += 1) {
+      h.gateway.answer('sendMessage', {
+        ok: false,
+        error: { code: 'RATE_LIMITED', message: 'slow down', retryable: true },
+      });
+    }
+
+    h.clock.advance(24 * HOUR);
+    for (const wait of [0, 1_000, 5_000, 25_000, 120_000]) {
+      h.clock.advance(wait);
+      expect(await h.tick()).toBe(1);
+    }
+    const [waiting] = await h.runsOf(automationId);
+    expect([waiting?.status, waiting?.timeline.at(-1)]).toEqual([
+      'waiting',
+      {
+        stepIndex: 1,
+        level: 'warn',
+        message: 'Reminder could not be sent',
+        context: { code: 'RATE_LIMITED' },
+        at: h.clock.now().toISOString(),
+      },
+    ]);
+
+    h.clock.advance(48 * HOUR);
+    await h.drain();
+    const [expired] = await h.runsOf(automationId);
+    expect([expired?.status, expired?.timeline.at(-1)?.message]).toEqual([
+      'expired',
+      'Gave up waiting for a reply',
+    ]);
+    expect(h.gateway.calls).toHaveLength(6);
+  });
+
+  it('refuses a webhook to a private address unless private webhooks are allowed', async () => {
+    const account = await h.seedAccount('instagram', 'ig_acc');
+    const webhookTo = (keyword: string): Definition => ({
+      trigger: {
+        comments: { posts: { kind: 'any' }, keywords: [keyword] },
+        onRepeatWhileWaiting: 'supersede',
+      },
+      steps: [
+        { kind: 'call_webhook', method: 'POST', url: 'http://127.0.0.1:9/hook', headers: {} },
+      ],
+    });
+    const refused = await h.createLive(account, webhookTo('refused'), 'refused');
+    const allowed = await h.createLive(account, webhookTo('allowed'), 'allowed');
+
+    h.deps.webhookAllowPrivate = false;
+    try {
+      await h.ingest([comment({ text: 'refused' })]);
+      await h.drain();
+    } finally {
+      h.deps.webhookAllowPrivate = true;
+    }
+    await h.ingest([comment({ eventId: 'evt_2', commentId: 'c_2', text: 'allowed' })]);
+    await h.drain();
+
+    const [refusedRun] = await h.runsOf(refused.automationId);
+    const [allowedRun] = await h.runsOf(allowed.automationId);
+    expect(refusedRun?.timeline.map((entry) => [entry.level, entry.message])).toEqual([
+      ['info', 'Started from a comment'],
+      ['warn', 'Webhook refused: the address is private'],
+      ['info', 'Completed'],
+    ]);
+    expect(allowedRun?.timeline.map((entry) => entry.message)).toEqual([
+      'Started from a comment',
+      'Webhook delivered (200)',
+      'Completed',
+    ]);
+    expect(h.webhookCalls.map((call) => call.url)).toEqual(['http://127.0.0.1:9/hook']);
+  });
+
+  it('fails the run when the gateway answers outside the contract', async () => {
+    const account = await h.seedAccount('instagram', 'ig_acc');
+    const { automationId } = await h.createLive(account, messageThenWait('wait'));
+    const malformed: typeof fetch = async () =>
+      new Response(JSON.stringify({ replyId: 42 }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    h.deps.gateway = httpGateway('http://gateway', 'token', malformed);
+    try {
+      await h.ingest([comment()]);
+      await h.drain();
+    } finally {
+      h.deps.gateway = h.gateway;
+    }
+
+    const [run] = await h.runsOf(automationId);
+    expect([run?.status, run?.error]).toEqual([
+      'failed',
+      { code: 'MALFORMED_RESPONSE', message: 'The gateway answered outside the contract' },
+    ]);
   });
 });

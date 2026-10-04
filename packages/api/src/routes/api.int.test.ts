@@ -7,9 +7,13 @@ import type {
   RunsResponse,
 } from '@comment-automations/api-schema';
 import type { Definition } from '@comment-automations/shared';
+import { mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import { afterAll, beforeAll, beforeEach, expect, it } from 'vitest';
+import { buildApp } from '../app.js';
 import type { Harness } from '../testing/harness.js';
-import { START, comment, createHarness, message, withDatabase } from '../testing/harness.js';
+import { START, TOKEN, comment, createHarness, message, withDatabase } from '../testing/harness.js';
 
 const HOUR = 60 * 60 * 1000;
 
@@ -342,6 +346,10 @@ withDatabase('the automations API on a real database', () => {
       await h.app.inject({ method: 'GET', url: `${base}?contact=JO` })
     ).json<RunsResponse>();
     expect(byContact.runs.map((run) => run.contactHandle)).toEqual(['joe']);
+    const byWildcard = (
+      await h.app.inject({ method: 'GET', url: `${base}?contact=${encodeURIComponent('_')}` })
+    ).json<RunsResponse>();
+    expect(byWildcard).toEqual({ runs: [], nextCursor: null });
     const byVersion = (
       await h.app.inject({ method: 'GET', url: `${base}?versionIds=${versionId}&status=waiting` })
     ).json<RunsResponse>();
@@ -373,6 +381,7 @@ withDatabase('the automations API on a real database', () => {
     const set = await h.app.inject({
       method: 'POST',
       url: '/test/clock',
+      headers: { 'x-service-token': TOKEN },
       payload: { now: '2026-12-01T00:00:00Z' },
     });
     const read = await h.app.inject({ method: 'GET', url: '/test/clock' });
@@ -380,5 +389,44 @@ withDatabase('the automations API on a real database', () => {
     expect(set.json()).toEqual({ now: '2026-12-01T00:00:00.000Z' });
     expect(read.json()).toEqual({ now: '2026-12-01T00:00:00.000Z' });
     expect(h.clock.now().toISOString()).toBe('2026-12-01T00:00:00.000Z');
+  });
+
+  it('serves the web page to a browser on an API path and the API answer to a JSON client', async () => {
+    const publicDir = mkdtempSync(path.join(tmpdir(), 'public-'));
+    writeFileSync(path.join(publicDir, 'index.html'), '<!doctype html><title>Automations</title>');
+    const app = buildApp({ ...h.deps, publicDir });
+    const page = await app.inject({
+      method: 'GET',
+      url: '/automations/abc',
+      headers: { accept: 'text/html,application/xhtml+xml,*/*;q=0.8' },
+    });
+    const nested = await app.inject({
+      method: 'GET',
+      url: '/automations/abc/runs',
+      headers: { accept: 'text/html' },
+    });
+    const api = await app.inject({
+      method: 'GET',
+      url: '/automations/abc',
+      headers: { accept: 'application/json' },
+    });
+    const health = await app.inject({
+      method: 'GET',
+      url: '/health',
+      headers: { accept: 'text/html' },
+    });
+    await app.close();
+
+    expect([page.statusCode, page.headers['content-type'], page.body]).toEqual([
+      200,
+      'text/html; charset=utf-8',
+      '<!doctype html><title>Automations</title>',
+    ]);
+    expect([nested.statusCode, nested.body]).toEqual([
+      200,
+      '<!doctype html><title>Automations</title>',
+    ]);
+    expect([api.statusCode, api.json()]).toEqual([404, { error: 'Not found' }]);
+    expect([health.statusCode, health.json()]).toEqual([200, { status: 'ok', sha: 'test' }]);
   });
 });

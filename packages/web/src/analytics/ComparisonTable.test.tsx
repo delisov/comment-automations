@@ -1,4 +1,4 @@
-import type { VersionAnalytics } from '@comment-automations/api-schema';
+import type { DefinitionSchema, VersionAnalytics } from '@comment-automations/api-schema';
 import { versionId } from '@comment-automations/shared';
 import { cleanup, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -35,6 +35,14 @@ const v4: VersionAnalytics = {
   medianSecondsToEmail: 41,
 };
 
+const definition: DefinitionSchema = {
+  trigger: {
+    comments: { posts: { kind: 'any' }, keywords: ['pricing'] },
+    onRepeatWhileWaiting: 'supersede',
+  },
+  steps: [{ kind: 'reply_to_comment', text: 'Sent you a DM!' }],
+};
+
 const versions: Version[] = [
   {
     id: versionId('v_3'),
@@ -42,6 +50,7 @@ const versions: Version[] = [
     note: '',
     publishedAt: '2026-09-30T14:22:00Z',
     isActive: false,
+    definition,
   },
   {
     id: versionId('v_4'),
@@ -49,6 +58,7 @@ const versions: Version[] = [
     note: '',
     publishedAt: '2026-10-04T10:00:00Z',
     isActive: true,
+    definition,
   },
 ];
 

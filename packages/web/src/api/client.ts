@@ -69,7 +69,7 @@ const parseMessage = (body: unknown, fallback: string): string => {
 const request = async <T>(path: string, init?: RequestInit): Promise<T> => {
   const response = await fetch(path, {
     ...init,
-    headers: { 'content-type': 'application/json', ...init?.headers },
+    headers: { accept: 'application/json', 'content-type': 'application/json', ...init?.headers },
   });
   const text = await response.text();
   const body: unknown = text === '' ? null : JSON.parse(text);
