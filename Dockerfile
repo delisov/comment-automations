@@ -2,6 +2,7 @@ FROM node:22-alpine AS build
 WORKDIR /app
 COPY package.json package-lock.json turbo.json tsconfig.base.json ./
 COPY packages/shared/package.json packages/shared/
+COPY packages/gateway-contract/package.json packages/gateway-contract/
 COPY packages/api-schema/package.json packages/api-schema/
 COPY packages/api/package.json packages/api/
 RUN npm ci
@@ -15,10 +16,12 @@ ENV NODE_ENV=production
 WORKDIR /app
 COPY package.json package-lock.json ./
 COPY packages/shared/package.json packages/shared/
+COPY packages/gateway-contract/package.json packages/gateway-contract/
 COPY packages/api-schema/package.json packages/api-schema/
 COPY packages/api/package.json packages/api/
 RUN npm ci --omit=dev
 COPY --from=build /app/packages/shared/dist packages/shared/dist
+COPY --from=build /app/packages/gateway-contract/dist packages/gateway-contract/dist
 COPY --from=build /app/packages/api-schema/dist packages/api-schema/dist
 COPY --from=build /app/packages/api/dist packages/api/dist
 USER node

@@ -19,6 +19,12 @@ services:
         GIT_SHA: ${GIT_SHA:-dev}
     ports:
       - '${API_PORT:-3000}:3000'
+    environment:
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/app
+      GATEWAY_MODE: ${GATEWAY_MODE:-test}
+      GATEWAY_URL: ${GATEWAY_URL:-http://stand:3100}
+      SERVICE_TOKEN: ${SERVICE_TOKEN:-dev-token}
+      CLOCK_MODE: ${CLOCK_MODE:-controlled}
     depends_on:
       postgres:
         condition: service_healthy

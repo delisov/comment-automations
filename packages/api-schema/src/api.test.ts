@@ -1,8 +1,13 @@
 import {
   accountId,
+  allowedStepKinds,
+  allowedTriggers,
   automationId,
+  canRemindBeforeReply,
+  capabilities,
   commentId,
   postId,
+  requiresUnreachableChoice,
   runId,
   versionId,
 } from '@comment-automations/shared';
@@ -30,6 +35,13 @@ const account: AccountSummary = {
   handle: 'boltato',
   displayName: 'Boltato',
   status: 'connected',
+  capabilities: {
+    record: capabilities.instagram,
+    allowedTriggers: allowedTriggers(capabilities.instagram),
+    allowedStepKinds: allowedStepKinds(capabilities.instagram),
+    requiresUnreachableChoice: requiresUnreachableChoice(capabilities.instagram),
+    canRemindBeforeReply: canRemindBeforeReply(capabilities.instagram),
+  },
 };
 
 const summary: AutomationSummary = {
@@ -39,18 +51,21 @@ const summary: AutomationSummary = {
   platform: 'instagram',
   state: 'live',
   activeVersionNumber: 2,
+  triggerSummary: 'Comment · pricing',
   stats: { runs24h: 12, succeeded24h: 9, failed24h: 1, lastRunAt: '2026-10-04T09:00:00Z' },
+};
+
+const definition = {
+  trigger: {
+    comments: { posts: { kind: 'any' as const }, keywords: ['pricing'] },
+    onRepeatWhileWaiting: 'supersede' as const,
+  },
+  steps: [{ kind: 'reply_to_comment' as const, text: 'Sent you a DM!' }],
 };
 
 const detail: AutomationDetail = {
   ...summary,
-  draft: {
-    trigger: {
-      comments: { posts: { kind: 'any' }, keywords: ['pricing'] },
-      onRepeatWhileWaiting: 'supersede',
-    },
-    steps: [{ kind: 'reply_to_comment', text: 'Sent you a DM!' }],
-  },
+  draft: definition,
   versions: [
     {
       id: versionId('v_1'),
@@ -58,6 +73,7 @@ const detail: AutomationDetail = {
       note: 'first',
       publishedAt: '2026-10-01T09:00:00Z',
       isActive: false,
+      definition,
     },
     {
       id: versionId('v_2'),
@@ -65,6 +81,7 @@ const detail: AutomationDetail = {
       note: '',
       publishedAt: '2026-10-03T09:00:00Z',
       isActive: true,
+      definition,
     },
   ],
 };

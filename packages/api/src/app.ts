@@ -1,14 +1,39 @@
 import { HealthResponse } from '@comment-automations/api-schema';
 import type { TypeBoxTypeProvider } from '@fastify/type-provider-typebox';
 import Fastify from 'fastify';
+import { registerAccountRoutes } from './routes/accounts.js';
+import { registerAutomationRoutes } from './routes/automations.js';
+import { registerIngestRoutes } from './routes/ingest.js';
+import { registerRunRoutes } from './routes/runs.js';
+import { registerStatic } from './routes/static.js';
+import { registerTestRoutes } from './routes/test.js';
+import type { App, AppDeps } from './routes/types.js';
 
-export const buildApp = (deps: { sha: string }) => {
+export type { AppDeps } from './routes/types.js';
+
+export const buildApp = (deps: AppDeps): App => {
   const app = Fastify().withTypeProvider<TypeBoxTypeProvider>();
 
   app.get('/health', { schema: { response: { 200: HealthResponse } } }, async () => ({
     status: 'ok' as const,
     sha: deps.sha,
   }));
+
+  app.setErrorHandler((error, _request, reply) => {
+    if ((error as { code?: string }).code === '22P02') {
+      return reply.status(404).send({ error: 'Not found' });
+    }
+    return reply.send(error);
+  });
+
+  registerAccountRoutes(app, deps);
+  registerAutomationRoutes(app, deps);
+  registerRunRoutes(app, deps);
+  registerIngestRoutes(app, deps);
+  if (deps.testMode) {
+    registerTestRoutes(app, deps);
+  }
+  registerStatic(app, deps.publicDir);
 
   return app;
 };
