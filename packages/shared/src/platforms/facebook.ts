@@ -12,6 +12,7 @@ export const facebook: CapabilityRecord = {
   reminderBeforeReply: false,
   messageLimits: { maxChars: 2000, buttons: 3, linksInText: true },
   replyLimits: { maxChars: 2000 },
+  handleMaxChars: 51,
   ownActivityEcho: true,
   access: 'appReview',
 };

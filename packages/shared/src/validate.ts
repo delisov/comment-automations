@@ -44,23 +44,40 @@ const NOT_ALLOWED_HERE: Record<StepKind, string> = {
   call_webhook: 'Calling a webhook is allowed at every position',
 };
 
+const capMessage = (record: CapabilityRecord): string =>
+  `${PLATFORM_LABELS[record.platform]} allows at most ${String(record.maxConsecutiveMessages)} messages in a row before the contact replies`;
+
 const notAllowedHereMessage = (
   kind: StepKind,
   record: CapabilityRecord,
   stepsSoFar: Step[],
 ): string =>
   kind === 'send_message' && consecutiveMessageCapReached(record, stepsSoFar)
-    ? `${PLATFORM_LABELS[record.platform]} allows at most ${String(record.maxConsecutiveMessages)} messages in a row before the contact replies`
+    ? capMessage(record)
     : NOT_ALLOWED_HERE[kind];
 
 const charCount = (text: string): number => text.length;
 
 const byteCount = (text: string): number => new TextEncoder().encode(text).length;
 
-const lengthMessage = (filledIn: boolean, count: number, unit: string, limit: number): string =>
-  filledIn
-    ? `Text may be ${count} ${unit} once filled in, the limit is ${limit}`
-    : `Text is ${count} ${unit}, the limit is ${limit}`;
+const HANDLE_PLACEHOLDER = /\{\{\s*contact\.handle\s*\}\}/;
+
+const lengthMessage = (
+  text: string,
+  filled: string,
+  count: number,
+  unit: string,
+  limit: number,
+  record: CapabilityRecord,
+): string => {
+  if (filled === text) {
+    return `Text is ${count} ${unit}, the limit is ${limit}`;
+  }
+  const handleNote = HANDLE_PLACEHOLDER.test(text)
+    ? `; {{contact.handle}} is counted as ${record.handleMaxChars} characters, the longest handle on ${PLATFORM_LABELS[record.platform]}`
+    : '';
+  return `Text may be ${count} ${unit} once filled in, the limit is ${limit}${handleNote}`;
+};
 
 const wholeHours = (hours: number, max: number): boolean =>
   Number.isInteger(hours) && hours >= 1 && hours <= max;
@@ -102,25 +119,38 @@ const textIssues = (
   text: string,
   path: string,
   limits: { maxChars: number; maxBytes?: number },
-  emailCaptured: boolean,
+  { record, emailCaptured }: StepContext,
 ): ValidationIssue[] => {
   const issues: ValidationIssue[] = [];
-  const filled = renderTemplate(text, longestTemplateVars);
-  const filledIn = filled !== text;
+  const filled = renderTemplate(text, longestTemplateVars(record));
   if (text.trim() === '') {
     issues.push({ path, code: 'TEXT_REQUIRED', message: 'Text must not be empty' });
   } else if (charCount(filled) > limits.maxChars) {
     issues.push({
       path,
       code: 'TEXT_TOO_LONG',
-      message: lengthMessage(filledIn, charCount(filled), 'characters', limits.maxChars),
+      message: lengthMessage(
+        text,
+        filled,
+        charCount(filled),
+        'characters',
+        limits.maxChars,
+        record,
+      ),
     });
   }
   if (limits.maxBytes !== undefined && byteCount(filled) > limits.maxBytes) {
     issues.push({
       path,
       code: 'TEXT_TOO_MANY_BYTES',
-      message: lengthMessage(filledIn, byteCount(filled), 'bytes in UTF-8', limits.maxBytes),
+      message: lengthMessage(
+        text,
+        filled,
+        byteCount(filled),
+        'bytes in UTF-8',
+        limits.maxBytes,
+        record,
+      ),
     });
   }
   issues.push(...placeholderIssues(text, path, emailCaptured));
@@ -188,8 +218,8 @@ const triggerIssues = (trigger: Trigger, record: CapabilityRecord): ValidationIs
 const replyIssues = (
   step: ReplyToCommentStep,
   path: string,
-  { record, emailCaptured }: StepContext,
-): ValidationIssue[] => textIssues(step.text, `${path}.text`, record.replyLimits, emailCaptured);
+  context: StepContext,
+): ValidationIssue[] => textIssues(step.text, `${path}.text`, context.record.replyLimits, context);
 
 const buttonIssues = (
   buttons: SendMessageStep['buttons'],
@@ -230,8 +260,9 @@ const buttonIssues = (
 const unreachableIssues = (
   step: SendMessageStep,
   path: string,
-  { record, trigger, emailCaptured }: StepContext,
+  context: StepContext,
 ): ValidationIssue[] => {
+  const { record, trigger } = context;
   const issues: ValidationIssue[] = [];
   const required = requiresUnreachableChoice(record);
   if (required && step.onUnreachable === undefined) {
@@ -264,7 +295,7 @@ const unreachableIssues = (
       });
     } else {
       issues.push(
-        ...textIssues(step.fallbackText, `${path}.fallbackText`, record.replyLimits, emailCaptured),
+        ...textIssues(step.fallbackText, `${path}.fallbackText`, record.replyLimits, context),
       );
     }
   }
@@ -292,7 +323,7 @@ const messageIssues = (
   path: string,
   context: StepContext,
 ): ValidationIssue[] => [
-  ...textIssues(step.text, `${path}.text`, context.record.messageLimits, context.emailCaptured),
+  ...textIssues(step.text, `${path}.text`, context.record.messageLimits, context),
   ...buttonIssues(step.buttons, `${path}.buttons`, context.record.messageLimits),
   ...privateReplyButtonIssues(step, `${path}.buttons`, context),
   ...unreachableIssues(step, path, context),
@@ -301,8 +332,9 @@ const messageIssues = (
 const waitIssues = (
   step: WaitForReplyStep,
   path: string,
-  { record, emailCaptured }: StepContext,
+  context: StepContext,
 ): ValidationIssue[] => {
+  const { record, stepsSoFar } = context;
   const issues: ValidationIssue[] = [];
   if (!wholeHours(step.giveUpHours, MAX_WAIT_HOURS)) {
     issues.push({
@@ -317,6 +349,12 @@ const waitIssues = (
         path: `${path}.reminder`,
         code: 'REMINDER_NOT_SUPPORTED',
         message: `${PLATFORM_LABELS[record.platform]} does not allow a second message before the contact replies`,
+      });
+    } else if (consecutiveMessageCapReached(record, stepsSoFar)) {
+      issues.push({
+        path: `${path}.reminder`,
+        code: 'REMINDER_NOT_ALLOWED_BY_CAP',
+        message: `${capMessage(record)}; the reminder would be one more`,
       });
     } else {
       if (!wholeHours(step.reminder.afterHours, step.giveUpHours - 1)) {
@@ -337,18 +375,13 @@ const waitIssues = (
         });
       }
       issues.push(
-        ...textIssues(
-          step.reminder.text,
-          `${path}.reminder.text`,
-          record.messageLimits,
-          emailCaptured,
-        ),
+        ...textIssues(step.reminder.text, `${path}.reminder.text`, record.messageLimits, context),
       );
     }
   }
   if (step.nudge !== undefined) {
     issues.push(
-      ...textIssues(step.nudge.text, `${path}.nudge.text`, record.messageLimits, emailCaptured),
+      ...textIssues(step.nudge.text, `${path}.nudge.text`, record.messageLimits, context),
     );
   }
   return issues;
@@ -376,6 +409,9 @@ const webhookIssues = (step: CallWebhookStep, path: string): ValidationIssue[] =
 const stepIssues = (definition: Definition, record: CapabilityRecord): ValidationIssue[] => {
   const kinds = allowedStepKinds(record);
   const issues: ValidationIssue[] = [];
+  if (definition.steps.length === 0) {
+    issues.push({ path: 'steps', code: 'STEPS_REQUIRED', message: 'Add at least one step' });
+  }
   let emailCaptured = false;
   definition.steps.forEach((step, index) => {
     const path = `steps.${index}`;

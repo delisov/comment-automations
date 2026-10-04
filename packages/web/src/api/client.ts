@@ -125,7 +125,7 @@ export const api = {
   automation: (id: AutomationId) => request<AutomationDetail>(`/automations/${id}`),
   createAutomation: (body: CreateAutomationRequest) => post<AutomationDetail>('/automations', body),
   saveDraft: (id: AutomationId, definition: DefinitionSchema) =>
-    request<AutomationDetail>(`/automations/${id}/draft`, {
+    request<AutomationDetail>(`/automations/${id}/draft?force=true`, {
       method: 'PUT',
       body: JSON.stringify({ definition }),
     }),

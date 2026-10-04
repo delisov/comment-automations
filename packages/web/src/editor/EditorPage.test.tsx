@@ -78,7 +78,21 @@ const routes: Record<string, unknown> = {
   '/automations/a_1': detail,
   '/automations/a_1/versions': { versions: [] },
   '/automations/a_1/runs?status=running&status=waiting&limit=200': { runs: [], nextCursor: null },
+  '/automations/a_1/runs?limit=200': { runs: [], nextCursor: null },
 };
+
+const waitingRun = {
+  id: 'r_1',
+  contactHandle: '@maria',
+  status: 'waiting',
+  stepIndex: 1,
+  stepCount: 2,
+  versionNumber: 1,
+  startedAt: '2026-10-04T10:00:00Z',
+  finishedAt: null,
+};
+
+const saveUrl = '/automations/a_1/draft?force=true';
 
 type Call = { url: string; method: string; headers: unknown; body: unknown };
 
@@ -97,7 +111,7 @@ const mockFetch = (overrides: Record<string, () => Response | Promise<Response>>
       if (override !== undefined) {
         return override();
       }
-      if (url === '/automations/a_1/draft') {
+      if (url === saveUrl) {
         return json(detail);
       }
       if (url === '/automations/a_1/publish') {
@@ -110,16 +124,20 @@ const mockFetch = (overrides: Record<string, () => Response | Promise<Response>>
   return calls;
 };
 
-const renderEditor = () => {
+const renderEditor = (path = '/automations/a_1') => {
   const router = createMemoryRouter(
     [
       { path: '/', element: <div>overview</div> },
       { path: '/automations/:id', element: <EditorPage tab="editor" /> },
+      { path: '/automations/:id/runs', element: <EditorPage tab="runs" /> },
+      { path: '/automations/:id/versions/:versionId', element: <EditorPage tab="editor" /> },
     ],
-    { initialEntries: ['/automations/a_1'] },
+    { initialEntries: [path] },
   );
   render(<RouterProvider router={router} />);
 };
+
+const buttonNames = () => screen.getAllByRole('button').map((button) => button.textContent);
 
 describe('editor page', () => {
   it('renders the draft from the API and publishes it as version 1', async () => {
@@ -142,7 +160,7 @@ describe('editor page', () => {
       expect(calls.some((call) => call.url === '/automations/a_1/publish')).toBe(true),
     );
 
-    const save = calls.find((call) => call.url === '/automations/a_1/draft');
+    const save = calls.find((call) => call.url === saveUrl);
     expect(save?.method).toBe('PUT');
     expect((save?.body as { definition: AutomationDetail['draft'] }).definition?.steps).toEqual([
       { kind: 'reply_to_comment', text: 'Sent you a DM!' },
@@ -150,9 +168,30 @@ describe('editor page', () => {
     ]);
   });
 
-  it('shows the API validation issues inline', async () => {
+  it('saves an unfinished draft without validating it and says so', async () => {
+    const unfinished = {
+      ...detail,
+      draft: {
+        ...detail.draft!,
+        trigger: { ...detail.draft!.trigger, comments: { posts: { kind: 'any' }, keywords: [] } },
+      },
+    };
+    const calls = mockFetch({
+      '/automations/a_1': () => json(unfinished),
+      [saveUrl]: () => json(unfinished),
+    });
+    renderEditor();
+    await screen.findByText('Not published yet');
+    fireEvent.click(screen.getByText('Save draft'));
+    await screen.findByText('Draft saved');
+    expect(calls.filter((call) => call.method === 'PUT').map((call) => call.url)).toEqual([
+      saveUrl,
+    ]);
+  });
+
+  it('shows the validation issues publishing returns inline', async () => {
     mockFetch({
-      '/automations/a_1/draft': () =>
+      '/automations/a_1/publish': () =>
         json(
           {
             issues: [
@@ -164,13 +203,15 @@ describe('editor page', () => {
     });
     renderEditor();
     await screen.findByText('Not published yet');
-    fireEvent.click(screen.getByText('Save draft'));
+    fireEvent.click(screen.getByText('Publish'));
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Publish' }));
     await screen.findByText('Write the text to send.');
+    expect(screen.queryByText('Draft saved')).toBeNull();
   });
 
   it('shows the API message when a save is rejected with 400', async () => {
     mockFetch({
-      '/automations/a_1/draft': () =>
+      [saveUrl]: () =>
         json(
           {
             statusCode: 400,
@@ -191,7 +232,7 @@ describe('editor page', () => {
 
   it('blames the connection only when the request never reached the API', async () => {
     mockFetch({
-      '/automations/a_1/draft': () => Promise.reject(new TypeError('Failed to fetch')),
+      [saveUrl]: () => Promise.reject(new TypeError('Failed to fetch')),
     });
     renderEditor();
     await screen.findByText('Not published yet');
@@ -273,15 +314,87 @@ describe('editor page', () => {
     });
     renderEditor();
     await screen.findByText('Archived');
-    expect(screen.getAllByRole('button').map((button) => button.textContent)).toEqual(['Versions']);
+    expect(buttonNames()).toEqual(['Versions']);
     expect((screen.getByLabelText('Reply text') as HTMLTextAreaElement).readOnly).toBe(true);
     expect(screen.queryByText('+ Add step')).toBeNull();
+  });
+
+  it('offers no mutating actions on a version of an archived automation', async () => {
+    mockFetch({
+      '/automations/a_1': () => json({ ...liveDetail, state: 'archived' }),
+      '/automations/a_1/versions': () => json({ versions: [liveVersion] }),
+    });
+    renderEditor('/automations/a_1/versions/v_1');
+    await screen.findByText('You are viewing version 1.');
+    expect(screen.getByText('Archived')).not.toBeNull();
+    expect(buttonNames()).toEqual(['Versions', 'Back to the editor']);
+    fireEvent.click(screen.getByRole('button', { name: 'Versions' }));
+    expect(within(screen.getByRole('dialog')).queryByText('Edit as a new version')).toBeNull();
+    expect(within(screen.getByRole('dialog')).queryByText('Make active')).toBeNull();
+  });
+
+  it('shows the not-found page for a version that is not in the list', async () => {
+    mockFetch({
+      '/automations/a_1': () => json(liveDetail),
+      '/automations/a_1/versions': () => json({ versions: [liveVersion] }),
+    });
+    renderEditor('/automations/a_1/versions/v_404');
+    await screen.findByText('Page not found');
+    expect(screen.queryByText('When someone…')).toBeNull();
+  });
+
+  it('does not offer the test hint on the runs tab of an archived automation', async () => {
+    mockFetch({
+      '/automations/a_1': () => json({ ...liveDetail, state: 'archived' }),
+      '/automations/a_1/versions': () => json({ versions: [liveVersion] }),
+    });
+    renderEditor('/automations/a_1/runs');
+    await screen.findByText('This automation was archived before it had any runs.');
+    expect(screen.queryByText('How to test it')).toBeNull();
+  });
+
+  it('words the publish confirmation as sentences with and without runs in progress', async () => {
+    mockFetch({
+      '/automations/a_1': () => json(liveDetail),
+      '/automations/a_1/versions': () => json({ versions: [liveVersion] }),
+    });
+    renderEditor();
+    fireEvent.click(await screen.findByText('Save and publish'));
+    expect(screen.getByRole('dialog').querySelector('p')?.textContent).toBe(
+      'Version 1 stays in the history unchanged. New comments and messages run version 2.',
+    );
+    cleanup();
+
+    mockFetch({
+      '/automations/a_1': () => json(liveDetail),
+      '/automations/a_1/versions': () => json({ versions: [liveVersion] }),
+      '/automations/a_1/runs?status=running&status=waiting&limit=200': () =>
+        json({ runs: [waitingRun], nextCursor: null }),
+    });
+    renderEditor();
+    fireEvent.click(await screen.findByText('Save and publish'));
+    await waitFor(() =>
+      expect(screen.getByRole('dialog').querySelector('p')?.textContent).toBe(
+        'Version 1 stays in the history unchanged. 1 run in progress on version 1 will finish on it; new comments and messages run version 2.',
+      ),
+    );
+  });
+
+  it('words the test hint for messages on a platform without comments', async () => {
+    mockFetch({ '/automations/a_1': () => json(whatsappDetail) });
+    renderEditor();
+    fireEvent.click(await screen.findByText('Publish'));
+    expect(
+      screen.getByText(
+        'Test it from another account: your own messages never trigger an automation.',
+      ),
+    ).not.toBeNull();
   });
 
   it('drops the comments trigger WhatsApp does not allow and saves the fix', async () => {
     const calls = mockFetch({
       '/automations/a_1': () => json(whatsappDetail),
-      '/automations/a_1/draft': () => json(whatsappDetail),
+      [saveUrl]: () => json(whatsappDetail),
     });
     renderEditor();
     await screen.findByText('Not published yet');
@@ -300,7 +413,7 @@ describe('editor page', () => {
 
     fireEvent.click(await screen.findByText('Save draft'));
     await waitFor(() => {
-      const save = calls.find((call) => call.url === '/automations/a_1/draft');
+      const save = calls.find((call) => call.url === saveUrl);
       expect(save?.method).toBe('PUT');
       expect(save?.body).toEqual({
         definition: { trigger: { onRepeatWhileWaiting: 'supersede' }, steps: [] },

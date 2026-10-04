@@ -7,12 +7,11 @@ const wording: Record<string, string> = {
   FALLBACK_TEXT_REQUIRED: 'Write the public reply to send instead.',
 };
 
+const issueText = (issue: ValidationIssue): string => wording[issue.code] ?? issue.message;
+
 export const issueAt = (issues: ValidationIssue[], path: string): string | null => {
   const issue = issues.find((item) => item.path === path);
-  if (issue === undefined) {
-    return null;
-  }
-  return wording[issue.code] ?? issue.message;
+  return issue === undefined ? null : issueText(issue);
 };
 
 export const issuesUnder = (issues: ValidationIssue[], path: string): ValidationIssue[] =>
@@ -20,3 +19,6 @@ export const issuesUnder = (issues: ValidationIssue[], path: string): Validation
 
 export const ErrorText = ({ text }: { text: string | null }) =>
   text === null ? null : <div className="errtext">{text}</div>;
+
+export const IssueTexts = ({ issues }: { issues: ValidationIssue[] }) =>
+  [...new Set(issues.map(issueText))].map((text) => <ErrorText key={text} text={text} />);

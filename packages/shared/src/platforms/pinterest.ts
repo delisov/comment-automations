@@ -11,6 +11,7 @@ export const pinterest: CapabilityRecord = {
   reminderBeforeReply: false,
   messageLimits: { maxChars: 0, buttons: 0, linksInText: false },
   replyLimits: { maxChars: 0 },
+  handleMaxChars: 31,
   ownActivityEcho: false,
   access: 'selfServe',
 };

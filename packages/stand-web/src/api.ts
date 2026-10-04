@@ -113,6 +113,12 @@ export type Rules = {
   ownActivityEcho: boolean;
 };
 
+export type ClockReading = {
+  now: string;
+  standNow: string;
+  source: 'service' | 'stand';
+};
+
 export type ClockAnswer = {
   now: string;
   service?: { status: number; body: unknown } | { error: string };
@@ -132,7 +138,7 @@ const request = async <T>(method: string, url: string, body?: unknown): Promise<
 };
 
 export const api = {
-  clock: () => request<ClockAnswer>('GET', '/test/clock'),
+  clock: () => request<ClockReading>('GET', '/test/clock'),
   setClock: (now: string) => request<ClockAnswer>('POST', '/test/clock', { now }),
   state: (platform: Platform) => request<State>('GET', `/scenario/state?platform=${platform}`),
   rules: (platform: Platform) => request<Rules>('GET', `/scenario/rules?platform=${platform}`),

@@ -58,7 +58,7 @@ export const formatDuration = (seconds: number): string => {
   return `${hours} h ${minutes % 60} min`;
 };
 
-export const charCount = (text: string): number => [...text].length;
+export const charCount = (text: string): number => text.length;
 
 export const byteCount = (text: string): number => new TextEncoder().encode(text).length;
 
