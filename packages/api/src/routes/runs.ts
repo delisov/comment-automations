@@ -151,7 +151,7 @@ export const registerRunRoutes = (app: App, deps: AppDeps): void => {
       if (run.status !== 'running' && run.status !== 'waiting') {
         return reply.status(409).send({ error: `A ${run.status} run cannot be stopped` });
       }
-      const stopped = await finishRun(db, id, 'expired', deps.clock.now(), {
+      const stopped = await finishRun(db, id, 'stopped', deps.clock.now(), {
         stepIndex: run.step_index,
         message: 'Stopped by the user',
       });
