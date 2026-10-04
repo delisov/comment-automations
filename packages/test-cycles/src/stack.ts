@@ -8,6 +8,7 @@ import type {
   RunDetail,
   RunSummary,
   RunsResponse,
+  ValidationIssue,
 } from '@comment-automations/api-schema';
 import type {
   AccountId,
@@ -21,39 +22,82 @@ import type {
   VersionId,
 } from '@comment-automations/shared';
 
-const request = async <T>(
+type Method = 'GET' | 'POST' | 'PUT' | 'DELETE';
+
+export type RawAnswer = { status: number; body: unknown };
+
+const TOKEN_PATHS = ['/test/', '/ingest/'];
+
+const requestRaw = async (
   base: string,
-  method: 'GET' | 'POST' | 'PUT',
+  method: Method,
   path: string,
   body?: unknown,
-): Promise<T> => {
+): Promise<RawAnswer> => {
   const response = await fetch(`${base}${path}`, {
     method,
     headers: {
       ...(body === undefined ? {} : { 'content-type': 'application/json' }),
-      ...(path.startsWith('/test/')
+      ...(TOKEN_PATHS.some((prefix) => path.startsWith(prefix))
         ? { 'x-service-token': process.env.SERVICE_TOKEN ?? 'dev-token' }
         : {}),
     },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   const text = await response.text();
-  if (!response.ok) {
-    throw new Error(`${method} ${base}${path} answered ${response.status}: ${text}`);
+  return { status: response.status, body: text === '' ? null : JSON.parse(text) };
+};
+
+const request = async <T>(
+  base: string,
+  method: Method,
+  path: string,
+  body?: unknown,
+): Promise<T> => {
+  const answer = await requestRaw(base, method, path, body);
+  if (answer.status < 200 || answer.status >= 300) {
+    throw new Error(
+      `${method} ${base}${path} answered ${answer.status}: ${JSON.stringify(answer.body)}`,
+    );
   }
-  return (text === '' ? null : JSON.parse(text)) as T;
+  return answer.body as T;
 };
 
 export type Live = { automationId: AutomationId; versionId: VersionId };
+
+export type CommentEventBody = {
+  kind: 'comment';
+  platform: Platform;
+  accountId: AccountId;
+  eventId: string;
+  commentId: CommentId;
+  postId: PostId;
+  authorId: UserId;
+  authorHandle: string;
+  text: string;
+  createdAt: string;
+};
+
+export type PublishAnswer =
+  | { status: 200; version: PublishResponse['version'] }
+  | { status: 422; issues: ValidationIssue[] }
+  | { status: number; error: string };
 
 export type Api = {
   url: string;
   health(): Promise<HealthResponse>;
   reset(): Promise<void>;
   accounts(): Promise<AccountSummary[]>;
+  create(accountId: AccountId, name: string): Promise<AutomationDetail>;
+  saveDraft(id: AutomationId, definition: Definition, force?: boolean): Promise<AutomationDetail>;
+  publish(id: AutomationId): Promise<PublishAnswer>;
+  automation(id: AutomationId): Promise<AutomationDetail>;
+  archive(id: AutomationId): Promise<void>;
   createLive(accountId: AccountId, name: string, definition: Definition): Promise<Live>;
   runs(automationId: AutomationId): Promise<RunSummary[]>;
   run(id: RunSummary['id']): Promise<RunDetail>;
+  stopRun(id: RunSummary['id']): Promise<RunDetail>;
+  ingest(events: CommentEventBody[]): Promise<{ accepted: number; duplicates: number }>;
 };
 
 const byStart = (a: RunSummary, b: RunSummary): number =>
@@ -66,6 +110,19 @@ export const apiClient = (url: string): Api => ({
     await request(url, 'POST', '/test/reset');
   },
   accounts: async () => (await request<AccountsResponse>(url, 'GET', '/accounts')).accounts,
+  create: (accountId, name) => request(url, 'POST', '/automations', { accountId, name }),
+  saveDraft: (id, definition, force = false) =>
+    request(url, 'PUT', `/automations/${id}/draft${force ? '?force=true' : ''}`, {
+      definition,
+    }),
+  publish: async (id) => {
+    const answer = await requestRaw(url, 'POST', `/automations/${id}/publish`, {});
+    return { status: answer.status, ...(answer.body as object) } as PublishAnswer;
+  },
+  automation: (id) => request(url, 'GET', `/automations/${id}`),
+  archive: async (id) => {
+    await request(url, 'DELETE', `/automations/${id}`);
+  },
   createLive: async (accountId, name, definition) => {
     const created = await request<AutomationDetail>(url, 'POST', '/automations', {
       accountId,
@@ -85,6 +142,8 @@ export const apiClient = (url: string): Api => ({
       byStart,
     ),
   run: (id) => request(url, 'GET', `/runs/${id}`),
+  stopRun: (id) => request(url, 'POST', `/runs/${id}/stop`, {}),
+  ingest: (events) => request(url, 'POST', '/ingest/events', { events }),
 });
 
 export type StandMessage = {

@@ -11,6 +11,7 @@ export type WebhookCall = {
 export type WebhookReceiver = {
   url: string;
   calls: WebhookCall[];
+  status: number;
   close(): Promise<void>;
 };
 
@@ -19,6 +20,12 @@ export const startWebhookReceiver = async (
   port: number,
 ): Promise<WebhookReceiver> => {
   const calls: WebhookCall[] = [];
+  const receiver = {
+    url: '',
+    calls,
+    status: 200,
+    close: () => new Promise<void>((resolve) => server.close(() => resolve())),
+  };
   const server = http.createServer((request, response) => {
     let text = '';
     request.on('data', (chunk: Buffer) => {
@@ -31,14 +38,11 @@ export const startWebhookReceiver = async (
         authorization: request.headers.authorization ?? null,
         body: text === '' ? null : JSON.parse(text),
       });
-      response.writeHead(200).end();
+      response.writeHead(receiver.status).end();
     });
   });
   await new Promise<void>((resolve) => server.listen(port, '0.0.0.0', resolve));
   const { port: bound } = server.address() as AddressInfo;
-  return {
-    url: `http://${host}:${bound}`,
-    calls,
-    close: () => new Promise((resolve) => server.close(() => resolve())),
-  };
+  receiver.url = `http://${host}:${bound}`;
+  return receiver;
 };
