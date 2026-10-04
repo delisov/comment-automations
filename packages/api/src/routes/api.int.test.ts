@@ -611,4 +611,141 @@ withDatabase('the automations API on a real database', () => {
       { operation: 'listPosts', request: { accountId: 'ig_acc' } },
     ]);
   });
+
+  it('saves a name and a draft with the NUL character removed', async () => {
+    const account = await h.seedAccount('instagram', 'ig_acc');
+    const created = await h.app.inject({
+      method: 'POST',
+      url: '/automations',
+      payload: { accountId: account, name: 'Pricing\u0000 guide' },
+    });
+    expect([created.statusCode, created.json<AutomationDetail>().name]).toEqual([
+      201,
+      'Pricing guide',
+    ]);
+
+    const drafted = await h.app.inject({
+      method: 'PUT',
+      url: `/automations/${created.json<AutomationDetail>().id}/draft`,
+      payload: {
+        definition: {
+          ...definition,
+          steps: [{ kind: 'reply_to_comment', text: 'Sent\u0000 you a DM!' }],
+        },
+      },
+    });
+    expect([drafted.statusCode, drafted.json<AutomationDetail>().draft?.steps]).toEqual([
+      200,
+      [{ kind: 'reply_to_comment', text: 'Sent you a DM!' }],
+    ]);
+  });
+
+  it('answers 400 when an analytics bound does not parse as a date', async () => {
+    const account = await h.seedAccount('instagram', 'ig_acc');
+    const { automationId } = await h.createLive(account, definition);
+    const url = `/automations/${automationId}/analytics`;
+
+    const leapSecond = await h.app.inject({
+      method: 'GET',
+      url: `${url}?since=2026-12-31T23:59:60Z`,
+    });
+    const garbage = await h.app.inject({ method: 'GET', url: `${url}?until=yesterday` });
+
+    expect([leapSecond.statusCode, leapSecond.json<{ message: string }>().message]).toEqual([
+      400,
+      'since is not a valid date-time',
+    ]);
+    expect([garbage.statusCode, garbage.json<{ message: string }>().message]).toEqual([
+      400,
+      'until is not valid',
+    ]);
+  });
+
+  it('refuses to change an archived automation', async () => {
+    const account = await h.seedAccount('instagram', 'ig_acc');
+    const { automationId, versionId } = await h.createLive(account, definition);
+    const url = `/automations/${automationId}`;
+    expect((await h.app.inject({ method: 'DELETE', url })).statusCode).toBe(204);
+
+    const attempts = [
+      await h.app.inject({ method: 'PUT', url: `${url}/draft`, payload: { definition } }),
+      await h.app.inject({ method: 'POST', url: `${url}/activate`, payload: { versionId } }),
+      await h.app.inject({
+        method: 'POST',
+        url: `${url}/draft-from-version`,
+        payload: { versionId },
+      }),
+      await h.app.inject({ method: 'POST', url: `${url}/pause` }),
+    ];
+
+    expect(attempts.map((response) => [response.statusCode, response.json()])).toEqual(
+      Array.from({ length: 4 }, () => [409, { error: 'An archived automation cannot be changed' }]),
+    );
+    const detail = (await h.app.inject({ method: 'GET', url })).json<AutomationDetail>();
+    expect([detail.state, detail.draft]).toEqual(['archived', null]);
+  });
+
+  it('reports a body that fails the schema as issues on the draft route and plainly elsewhere', async () => {
+    const account = await h.seedAccount('instagram', 'ig_acc');
+    const created = await h.app.inject({
+      method: 'POST',
+      url: '/automations',
+      payload: { accountId: account, name: 'Pricing guide' },
+    });
+    const url = `/automations/${created.json<AutomationDetail>().id}/draft`;
+
+    const longKeyword = await h.app.inject({
+      method: 'PUT',
+      url,
+      payload: {
+        definition: {
+          ...definition,
+          trigger: {
+            comments: { posts: { kind: 'any' }, keywords: ['a', 'b', 'c', 'x'.repeat(101)] },
+            onRepeatWhileWaiting: 'supersede',
+          },
+        },
+      },
+    });
+    const longText = await h.app.inject({
+      method: 'PUT',
+      url,
+      payload: {
+        definition: {
+          ...definition,
+          steps: [{ kind: 'send_message', text: 'x'.repeat(10_001), buttons: [] }],
+        },
+      },
+    });
+    const unnamed = await h.app.inject({
+      method: 'POST',
+      url: '/automations',
+      payload: { accountId: account, name: '' },
+    });
+
+    expect([longKeyword.statusCode, longKeyword.json()]).toEqual([
+      422,
+      {
+        issues: [
+          {
+            path: 'trigger.comments.keywords.3',
+            code: 'TOO_LONG',
+            message: 'is longer than 100 characters',
+          },
+        ],
+      },
+    ]);
+    expect([longText.statusCode, longText.json()]).toEqual([
+      422,
+      {
+        issues: [
+          { path: 'steps.0.text', code: 'TOO_LONG', message: 'is longer than 10000 characters' },
+        ],
+      },
+    ]);
+    expect([unnamed.statusCode, unnamed.json<{ message: string }>().message]).toEqual([
+      400,
+      'name must not be empty',
+    ]);
+  });
 });

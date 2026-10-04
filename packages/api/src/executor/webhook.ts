@@ -5,6 +5,7 @@ import type { Db, RunError } from '../db/types.js';
 import { json } from '../db/types.js';
 import type { LoadedRun } from '../runs/store.js';
 import { logRun } from '../runs/store.js';
+import { idempotencyKey } from './idempotency.js';
 import type { Deps } from './send.js';
 
 const TIMEOUT_MS = 10_000;
@@ -85,14 +86,19 @@ const resolvesToPrivate = async (url: string): Promise<boolean> => {
   }
 };
 
-const attempt = async (deps: Deps, step: CallWebhookStep, body: string): Promise<Delivery> => {
+const attempt = async (
+  deps: Deps,
+  step: CallWebhookStep,
+  key: string,
+  body: string,
+): Promise<Delivery> => {
   try {
     if (!deps.webhookAllowPrivate && (await resolvesToPrivate(step.url))) {
       return { failure: 'private_address' };
     }
     const response = await deps.fetch(step.url, {
       method: step.method,
-      headers: { 'content-type': 'application/json', ...step.headers },
+      headers: { 'content-type': 'application/json', ...step.headers, 'X-Idempotency-Key': key },
       body: step.method === 'GET' ? undefined : body,
       redirect: 'manual',
       signal: AbortSignal.timeout(TIMEOUT_MS),
@@ -133,16 +139,22 @@ export const callWebhook = async (
     },
     captured: run.context.captured,
   };
+  const key = idempotencyKey(run.id, run.step_index, 'webhook');
   const body = json(payload);
-  const delivery = await attempt(deps, step, body);
+  const delivery = await attempt(deps, step, key, body);
   const now = deps.clock.now();
   await db
     .insertInto('outbound_calls')
     .values({
       run_id: run.id,
-      idempotency_key: `${run.id}:${run.step_index}:webhook`,
+      idempotency_key: key,
       kind: 'webhook',
-      request: json({ method: step.method, url: step.url, body: payload }),
+      request: json({
+        method: step.method,
+        url: step.url,
+        headers: { 'X-Idempotency-Key': key },
+        body: payload,
+      }),
       response: json(delivery),
       status: delivered(delivery) ? 'ok' : 'failed',
       at: now,
