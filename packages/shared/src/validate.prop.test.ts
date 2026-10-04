@@ -5,6 +5,7 @@ import {
   allowedStepKinds,
   allowedTriggers,
   canRemindBeforeReply,
+  nextAllowedStepKinds,
   requiresUnreachableChoice,
 } from './capabilities.js';
 import type { Definition, Step, StepKind, Trigger } from './definition.js';
@@ -31,19 +32,30 @@ const button = fc.record({
 
 const triggerFor = (record: CapabilityRecord): fc.Arbitrary<Trigger> => {
   const allowed = allowedTriggers(record);
-  const keywords = fc.array(text(12), { minLength: 1, maxLength: 3 });
-  const repeat = fc.constantFrom('supersede' as const, 'ignore' as const);
-  if (allowed.comments) {
-    return fc.record({
-      comments: fc.record({ posts: fc.constant({ kind: 'any' as const }), keywords }),
-      onRepeatWhileWaiting: repeat,
-    });
-  }
-  return fc.record({
-    messages: fc.record({ keywords: fc.array(text(12), { maxLength: 3 }) }),
-    onRepeatWhileWaiting: repeat,
+  const comments = fc.record({
+    posts: fc.constant({ kind: 'any' as const }),
+    keywords: fc.array(text(12), { minLength: 1, maxLength: 3 }),
   });
+  const messages = fc.record({ keywords: fc.array(text(12), { maxLength: 3 }) });
+  const shapes: fc.Arbitrary<Omit<Trigger, 'onRepeatWhileWaiting'>>[] = [];
+  if (allowed.comments) {
+    shapes.push(comments.map((value) => ({ comments: value })));
+  }
+  if (allowed.messages) {
+    shapes.push(messages.map((value) => ({ messages: value })));
+  }
+  if (allowed.comments && allowed.messages) {
+    shapes.push(fc.record({ comments, messages }));
+  }
+  return fc
+    .tuple(fc.oneof(...shapes), fc.constantFrom('supersede' as const, 'ignore' as const))
+    .map(([shape, onRepeatWhileWaiting]) => ({ ...shape, onRepeatWhileWaiting }));
 };
+
+const windowHours = (record: CapabilityRecord): number =>
+  record.conversationWindow === null
+    ? Number.POSITIVE_INFINITY
+    : record.conversationWindow.durationMs / 3_600_000;
 
 const stepOfKind = (kind: StepKind, record: CapabilityRecord): fc.Arbitrary<Step> => {
   switch (kind) {
@@ -77,7 +89,10 @@ const stepOfKind = (kind: StepKind, record: CapabilityRecord): fc.Arbitrary<Step
             ? fc
                 .option(
                   fc.record({
-                    afterHours: fc.integer({ min: 1, max: step.giveUpHours - 1 }),
+                    afterHours: fc.integer({
+                      min: 1,
+                      max: Math.min(step.giveUpHours - 1, windowHours(record) - 1),
+                    }),
                     text: text(record.messageLimits.maxChars),
                   }),
                   { nil: undefined },
@@ -95,34 +110,33 @@ const stepOfKind = (kind: StepKind, record: CapabilityRecord): fc.Arbitrary<Step
   }
 };
 
-const dropWaitsBeforeFirstMessage = (steps: Step[]): Step[] => {
-  const firstMessage = steps.findIndex((step) => step.kind === 'send_message');
-  return steps.filter(
-    (step, index) =>
-      step.kind !== 'wait_for_reply' || (firstMessage !== -1 && index > firstMessage),
-  );
-};
+const stepsFrom = (
+  record: CapabilityRecord,
+  trigger: Trigger,
+  stepsSoFar: Step[],
+  remaining: number,
+): fc.Arbitrary<Step[]> =>
+  remaining === 0
+    ? fc.constant(stepsSoFar)
+    : fc
+        .constantFrom(...nextAllowedStepKinds(record, trigger, stepsSoFar))
+        .chain((kind) => stepOfKind(kind, record))
+        .chain((step) => stepsFrom(record, trigger, [...stepsSoFar, step], remaining - 1));
 
 const buildableDefinition = (record: CapabilityRecord): fc.Arbitrary<Definition> =>
-  fc.record({
-    trigger: triggerFor(record),
-    steps: fc
-      .array(
-        fc.constantFrom(...allowedStepKinds(record)).chain((kind) => stepOfKind(kind, record)),
-        { maxLength: 6 },
-      )
-      .map(dropWaitsBeforeFirstMessage),
-  });
+  fc
+    .tuple(triggerFor(record), fc.nat({ max: 6 }))
+    .chain(([trigger, length]) =>
+      stepsFrom(record, trigger, [], length).map((steps) => ({ trigger, steps })),
+    );
 
-const platform = fc.constantFrom(...PLATFORMS);
-
-const platformWithTrigger = platform.filter((name) => {
+const platformWithTrigger = fc.constantFrom(...PLATFORMS).filter((name) => {
   const allowed = allowedTriggers(capabilities[name]);
   return allowed.comments || allowed.messages;
 });
 
 describe('validateDefinition invariants', () => {
-  it('accepts every definition the constructor can build from allowedStepKinds', () => {
+  it('accepts every definition built by picking from nextAllowedStepKinds, for every record and trigger shape', () => {
     fc.assert(
       fc.property(
         platformWithTrigger.chain((name) =>
@@ -135,33 +149,43 @@ describe('validateDefinition invariants', () => {
     );
   });
 
-  it('names every step outside allowedStepKinds as STEP_NOT_SUPPORTED at its index', () => {
-    const platformWithGaps = platformWithTrigger.filter(
-      (name) => allowedStepKinds(capabilities[name]).length < STEP_KINDS.length,
-    );
+  it('reports a step outside nextAllowedStepKinds at its position, naming whether the platform ever offers it', () => {
     fc.assert(
       fc.property(
-        platformWithGaps.chain((name) => {
+        platformWithTrigger.chain((name) => {
           const record = capabilities[name];
-          const allowed = allowedStepKinds(record);
-          const forbidden = STEP_KINDS.filter((kind) => !allowed.includes(kind));
-          return fc.tuple(
-            fc.constant(name),
-            buildableDefinition(record),
-            fc.constantFrom(...forbidden).chain((kind) => stepOfKind(kind, record)),
-            fc.nat(),
-          );
+          return buildableDefinition(record).chain((definition) => {
+            const outsideAt = (index: number): StepKind[] => {
+              const next = nextAllowedStepKinds(
+                record,
+                definition.trigger,
+                definition.steps.slice(0, index),
+              );
+              return STEP_KINDS.filter((kind) => !next.includes(kind));
+            };
+            const positions = Array.from(
+              { length: definition.steps.length + 1 },
+              (_, i) => i,
+            ).filter((index) => outsideAt(index).length > 0);
+            return fc.constantFrom(...positions).chain((index) =>
+              fc
+                .constantFrom(...outsideAt(index))
+                .chain((kind) => stepOfKind(kind, record))
+                .map((foreignStep) => [name, definition, index, foreignStep] as const),
+            );
+          });
         }),
-        ([name, definition, foreignStep, position]) => {
-          const index = position % (definition.steps.length + 1);
+        ([name, definition, index, foreignStep]) => {
+          const record = capabilities[name];
           const steps = [...definition.steps];
           steps.splice(index, 0, foreignStep);
-          const issues = validateDefinition({ ...definition, steps }, capabilities[name]);
-          expect(issues).toContainEqual({
-            path: `steps.${index}.kind`,
-            code: 'STEP_NOT_SUPPORTED',
-            message: expect.stringContaining(foreignStep.kind),
-          });
+          const issues = validateDefinition({ ...definition, steps }, record);
+          const expected = allowedStepKinds(record).includes(foreignStep.kind)
+            ? 'STEP_NOT_ALLOWED_HERE'
+            : 'STEP_NOT_SUPPORTED';
+          expect(
+            issues.filter((issue) => issue.path === `steps.${index}.kind`).map(({ code }) => code),
+          ).toEqual([expected]);
         },
       ),
     );

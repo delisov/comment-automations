@@ -1,19 +1,20 @@
-const WORD_BREAK = /[^\p{L}\p{N}]+/u;
+const WORD = /[\p{L}\p{M}\p{N}]+|\p{Extended_Pictographic}(?:️|‍\p{Extended_Pictographic})*/gu;
 
-const normalizeWords = (text: string): string =>
-  text
-    .split(WORD_BREAK)
-    .filter((word) => word !== '')
-    .join(' ')
-    .toLowerCase();
+const UNSPACED_SCRIPTS =
+  /^[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Thai}\p{Script=Lao}\p{Script=Khmer}\p{Script=Myanmar}]+$/u;
+
+const normalizeWords = (text: string): string => (text.match(WORD) ?? []).join(' ').toLowerCase();
 
 export const matchesKeywords = (text: string, keywords: string[]): boolean => {
   if (keywords.length === 0) {
     return text.trim() !== '';
   }
-  const haystack = ` ${normalizeWords(text)} `;
+  const words = normalizeWords(text);
+  const haystack = ` ${words} `;
   return keywords
     .map(normalizeWords)
     .filter((keyword) => keyword !== '')
-    .some((keyword) => haystack.includes(` ${keyword} `));
+    .some((keyword) =>
+      UNSPACED_SCRIPTS.test(keyword) ? words.includes(keyword) : haystack.includes(` ${keyword} `),
+    );
 };
