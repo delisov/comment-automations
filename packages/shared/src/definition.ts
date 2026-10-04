@@ -2,6 +2,8 @@ import type { PostId } from './ids.js';
 
 export const DEFAULT_GIVE_UP_HOURS = 72;
 
+export const MAX_WAIT_HOURS = 720;
+
 export type Button = { title: string; url: string };
 
 export type PostSelection = { kind: 'any' } | { kind: 'specific'; postId: PostId };

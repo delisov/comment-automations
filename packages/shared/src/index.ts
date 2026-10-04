@@ -33,6 +33,8 @@ export {
   allowedStepKinds,
   allowedTriggers,
   canRemindBeforeReply,
+  consecutiveMessageCapReached,
+  deliveredAsPrivateReply,
   nextAllowedStepKinds,
   requiresUnreachableChoice,
 } from './capabilities.js';
@@ -47,7 +49,12 @@ export type {
   ReplyLimits,
 } from './capabilities.js';
 export { capabilities } from './platforms/index.js';
-export { DEFAULT_GIVE_UP_HOURS, STEP_KINDS, WEBHOOK_METHODS } from './definition.js';
+export {
+  DEFAULT_GIVE_UP_HOURS,
+  MAX_WAIT_HOURS,
+  STEP_KINDS,
+  WEBHOOK_METHODS,
+} from './definition.js';
 export type {
   Button,
   CallWebhookStep,
@@ -65,9 +72,9 @@ export type {
   WaitForReplyStep,
   WebhookMethod,
 } from './definition.js';
-export { matchesKeywords } from './keywords.js';
+export { isMatchableKeyword, matchesKeywords } from './keywords.js';
 export { extractEmail } from './email.js';
-export { renderTemplate } from './template.js';
+export { longestTemplateVars, renderTemplate } from './template.js';
 export type { TemplateVars } from './template.js';
 export { validateDefinition } from './validate.js';
 export type { ValidationIssue } from './validate.js';
