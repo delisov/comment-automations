@@ -1,7 +1,9 @@
 import type { RunDetail } from '@comment-automations/api-schema';
-import { runId } from '@comment-automations/shared';
+import type { Step } from '@comment-automations/shared';
+import { runId, versionId } from '@comment-automations/shared';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import type { Version } from '../api/client.js';
 import { RunDrawer } from './RunDrawer.js';
 
 afterEach(() => {
@@ -21,6 +23,45 @@ const run: RunDetail = {
   timeline: [],
   context: { captured: {}, replied: false },
 };
+
+const version = (number: number, steps: Step[], isActive: boolean): Version => ({
+  id: versionId(`v_${number}`),
+  number,
+  note: '',
+  publishedAt: `2026-10-0${number}T10:00:00Z`,
+  isActive,
+  definition: {
+    trigger: {
+      comments: { posts: { kind: 'any' }, keywords: ['pricing'] },
+      onRepeatWhileWaiting: 'supersede',
+    },
+    steps,
+  },
+});
+
+const versions: Version[] = [
+  version(
+    1,
+    [
+      { kind: 'send_message', text: 'Hey', buttons: [] },
+      {
+        kind: 'wait_for_reply',
+        expect: 'email',
+        giveUpHours: 72,
+        nudge: { text: '', then: 'wait' },
+      },
+    ],
+    false,
+  ),
+  version(
+    2,
+    [
+      { kind: 'reply_to_comment', text: 'Sent you a DM!' },
+      { kind: 'call_webhook', method: 'POST', url: 'https://x.y', headers: {} },
+    ],
+    true,
+  ),
+];
 
 const mockFetch = (stopResponse: () => Response) => {
   const calls: { url: string; headers: unknown }[] = [];
@@ -47,7 +88,9 @@ describe('run drawer', () => {
         ),
     );
     const onChanged = vi.fn();
-    render(<RunDrawer runId={run.id} stepTitles={[]} onClose={vi.fn()} onChanged={onChanged} />);
+    render(
+      <RunDrawer runId={run.id} versions={versions} onClose={vi.fn()} onChanged={onChanged} />,
+    );
     fireEvent.click(await screen.findByText('Stop this run'));
     await screen.findByText('Expired');
     expect(onChanged).toHaveBeenCalledTimes(1);
@@ -63,10 +106,20 @@ describe('run drawer', () => {
           status: 400,
         }),
     );
-    render(<RunDrawer runId={run.id} stepTitles={[]} onClose={vi.fn()} onChanged={vi.fn()} />);
+    render(<RunDrawer runId={run.id} versions={versions} onClose={vi.fn()} onChanged={vi.fn()} />);
     fireEvent.click(await screen.findByText('Stop this run'));
     await screen.findByText('body must be object');
     expect(screen.getByText('Stop this run')).not.toBeNull();
+  });
+
+  it('names the steps from the version the run started on, not the active one', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(JSON.stringify(run), { status: 200 })),
+    );
+    render(<RunDrawer runId={run.id} versions={versions} onClose={vi.fn()} onChanged={vi.fn()} />);
+    expect(await screen.findByText('Step 2 of 2 · Wait for an email address')).not.toBeNull();
+    expect(screen.queryByText(/Send to a webhook/)).toBeNull();
   });
 
   it('labels a stopped run as Stopped', async () => {
@@ -75,7 +128,7 @@ describe('run drawer', () => {
       'fetch',
       vi.fn(async () => new Response(JSON.stringify(stopped), { status: 200 })),
     );
-    render(<RunDrawer runId={run.id} stepTitles={[]} onClose={vi.fn()} onChanged={vi.fn()} />);
+    render(<RunDrawer runId={run.id} versions={versions} onClose={vi.fn()} onChanged={vi.fn()} />);
     expect(await screen.findByText('Stopped')).not.toBeNull();
   });
 });

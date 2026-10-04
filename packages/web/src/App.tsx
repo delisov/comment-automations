@@ -1,26 +1,14 @@
 import type { RouteObject } from 'react-router';
-import { createBrowserRouter, Link, Navigate, Outlet, useParams } from 'react-router';
+import { createBrowserRouter, Navigate, Outlet, useParams } from 'react-router';
 import { EditorPage } from './editor/EditorPage.js';
+import { NotFoundPage } from './NotFoundPage.js';
 import { OverviewPage } from './overview/OverviewPage.js';
 import { Shell } from './shell/Shell.js';
-import { Empty } from './ui.js';
 
 const Layout = () => (
   <Shell>
     <Outlet />
   </Shell>
-);
-
-const NotFoundPage = () => (
-  <Empty
-    title="Page not found"
-    text="There is nothing at this address."
-    action={
-      <Link to="/" className="btn sec">
-        Back to DM automations
-      </Link>
-    }
-  />
 );
 
 const EditorTabRedirect = () => {

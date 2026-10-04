@@ -2,9 +2,16 @@ import type { CapabilitiesResponse, ValidationIssue } from '@comment-automations
 import type { Step, Trigger } from '@comment-automations/shared';
 import { deliveredAsPrivateReply } from '@comment-automations/shared';
 import { useState } from 'react';
-import { issuesUnder } from './issues.js';
+import { IssueTexts, issuesUnder } from './issues.js';
 import { StepPalette } from './StepPalette.js';
-import { MessageStep, newStep, ReplyStep, stepTitle, WebhookStep } from './steps.js';
+import {
+  fieldIssuePaths,
+  MessageStep,
+  newStep,
+  ReplyStep,
+  stepTitle,
+  WebhookStep,
+} from './steps.js';
 import { WaitStep } from './WaitStep.js';
 
 const StepMenu = ({
@@ -110,6 +117,8 @@ export const StepsCard = ({
         {steps.map((step, index) => {
           const path = `steps.${index}`;
           const stepIssues = issuesUnder(issues, path);
+          const fieldPaths = fieldIssuePaths(step).map((field) => `${path}.${field}`);
+          const headerIssues = stepIssues.filter((issue) => !fieldPaths.includes(issue.path));
           const orphanReply = step.kind === 'reply_to_comment' && trigger.comments === undefined;
           return (
             <div key={index}>
@@ -139,6 +148,11 @@ export const StepsCard = ({
                     Needs the comments trigger
                   </div>
                 ) : null}
+                {headerIssues.length === 0 ? null : (
+                  <div style={{ marginBottom: 8 }}>
+                    <IssueTexts issues={headerIssues} />
+                  </div>
+                )}
                 <StepBody
                   step={step}
                   caps={caps}

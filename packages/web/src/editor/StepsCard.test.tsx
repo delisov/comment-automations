@@ -1,3 +1,4 @@
+import type { ValidationIssue } from '@comment-automations/api-schema';
 import type { Step, Trigger } from '@comment-automations/shared';
 import { capabilities } from '@comment-automations/shared';
 import { cleanup, render, screen, within } from '@testing-library/react';
@@ -14,7 +15,11 @@ const commentsTrigger: Trigger = {
 
 const privateReplyLine = 'Sent as a private reply to the comment · text only';
 
-const renderSteps = (platform: 'instagram' | 'bluesky', steps: Step[], issues = []) => {
+const renderSteps = (
+  platform: 'instagram' | 'bluesky',
+  steps: Step[],
+  issues: ValidationIssue[] = [],
+) => {
   render(
     <StepsCard
       steps={steps}
@@ -65,5 +70,69 @@ describe('steps card', () => {
   it('treats the first Bluesky message as a direct message', () => {
     const [first] = renderSteps('bluesky', [{ kind: 'send_message', text: 'Hey', buttons: [] }]);
     expect(within(first!).queryByText(privateReplyLine)).toBeNull();
+  });
+
+  it('writes the issue on a step kind under the step header', () => {
+    const [, second] = renderSteps(
+      'instagram',
+      [
+        { kind: 'send_message', text: 'Hey', buttons: [] },
+        { kind: 'send_message', text: 'And again', buttons: [] },
+      ],
+      [
+        {
+          path: 'steps.1.kind',
+          code: 'STEP_NOT_ALLOWED_HERE',
+          message: 'Instagram allows at most 1 messages in a row before the contact replies',
+        },
+      ],
+    );
+    expect(second!.className).toBe('step err');
+    expect(
+      within(second!).getByText(
+        'Instagram allows at most 1 messages in a row before the contact replies',
+      ),
+    ).not.toBeNull();
+  });
+
+  it('writes the issue on the unreachable choice under the choice', () => {
+    const [first] = renderSteps(
+      'bluesky',
+      [{ kind: 'send_message', text: 'Hey', buttons: [], onUnreachable: 'skip' }],
+      [
+        {
+          path: 'steps.0.onUnreachable',
+          code: 'UNREACHABLE_CHOICE_REQUIRED',
+          message: 'Bluesky lets recipients refuse messages; choose what happens',
+        },
+      ],
+    );
+    expect(
+      within(first!).getByText('Bluesky lets recipients refuse messages; choose what happens'),
+    ).not.toBeNull();
+  });
+
+  it('writes the issue on a button title under the button and any other step path once', () => {
+    const [first] = renderSteps(
+      'bluesky',
+      [
+        {
+          kind: 'send_message',
+          text: 'Hey',
+          buttons: [{ title: '', url: 'https://x.y' }],
+          onUnreachable: 'skip',
+        },
+      ],
+      [
+        {
+          path: 'steps.0.buttons.0.title',
+          code: 'BUTTON_TITLE_REQUIRED',
+          message: 'Name the button',
+        },
+        { path: 'steps.0.rule.new', code: 'NEW_RULE', message: 'A rule the editor never heard of' },
+      ],
+    );
+    expect(within(first!).getAllByText('Name the button')).toHaveLength(1);
+    expect(within(first!).getAllByText('A rule the editor never heard of')).toHaveLength(1);
   });
 });

@@ -46,7 +46,6 @@ export const WaitStep = ({
   const reminderDelayError = issueAt(issues, `${path}.reminder.afterHours`);
   const nudgeError = issueAt(issues, `${path}.nudge.text`);
   const giveUpError = issueAt(issues, `${path}.giveUpHours`);
-  const stepError = issueAt(issues, path);
   return (
     <>
       <div className="field" style={{ margin: '0 0 14px' }}>
@@ -189,7 +188,6 @@ export const WaitStep = ({
           </div>
         )}
       </div>
-      <ErrorText text={stepError} />
     </>
   );
 };
