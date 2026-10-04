@@ -1,5 +1,6 @@
 import type { CapabilitiesResponse, ValidationIssue } from '@comment-automations/api-schema';
 import type { Step, Trigger } from '@comment-automations/shared';
+import { deliveredAsPrivateReply } from '@comment-automations/shared';
 import { useState } from 'react';
 import { issuesUnder } from './issues.js';
 import { StepPalette } from './StepPalette.js';
@@ -55,6 +56,7 @@ const StepBody = ({
   issues,
   path,
   readOnly,
+  privateReply,
   onChange,
 }: {
   step: Step;
@@ -62,6 +64,7 @@ const StepBody = ({
   issues: ValidationIssue[];
   path: string;
   readOnly: boolean;
+  privateReply: boolean;
   onChange: (step: Step) => void;
 }) => {
   const common = { caps, issues, path, readOnly };
@@ -69,7 +72,9 @@ const StepBody = ({
     case 'reply_to_comment':
       return <ReplyStep {...common} step={step} onChange={onChange} />;
     case 'send_message':
-      return <MessageStep {...common} step={step} onChange={onChange} />;
+      return (
+        <MessageStep {...common} step={step} privateReply={privateReply} onChange={onChange} />
+      );
     case 'wait_for_reply':
       return <WaitStep {...common} step={step} onChange={onChange} />;
     case 'call_webhook':
@@ -140,6 +145,11 @@ export const StepsCard = ({
                   issues={stepIssues}
                   path={path}
                   readOnly={readOnly}
+                  privateReply={deliveredAsPrivateReply(
+                    caps.record,
+                    trigger,
+                    steps.slice(0, index),
+                  )}
                   onChange={(changed) => onChange(steps.map((s, i) => (i === index ? changed : s)))}
                 />
               </div>

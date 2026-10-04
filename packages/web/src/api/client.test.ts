@@ -18,6 +18,17 @@ describe('api client', () => {
     ]);
   });
 
+  it('archives an automation with a bodiless DELETE', async () => {
+    const fetchMock = vi.fn<(url: string, init?: RequestInit) => Promise<Response>>(
+      async () => new Response(null, { status: 204 }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    await expect(api.archive(automationId('a_1'))).resolves.toBeNull();
+    expect(fetchMock.mock.calls.map(([url, init]) => [url, init?.method, init?.body])).toEqual([
+      ['/automations/a_1', 'DELETE', undefined],
+    ]);
+  });
+
   it('reports the error field of a 4xx answer that has no message', async () => {
     vi.stubGlobal(
       'fetch',
