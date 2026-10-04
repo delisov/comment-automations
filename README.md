@@ -85,8 +85,8 @@ The runner talks to `API_URL` (default `http://localhost:3000`) and `STAND_URL` 
 
 ## Design
 
-To be written.
+Why the platforms are the hard part, the capability record that drives the editor, the validator and the executor, the data model, the execution model, and the reliability and concurrency mechanisms in one table: [docs/design.md](docs/design.md). The implementation notes are in [docs/architecture.md](docs/architecture.md), the platform research in [docs/platforms.md](docs/platforms.md), and the stand's design in [docs/test-stand.md](docs/test-stand.md).
 
 ## How this was built
 
-To be written.
+Which parts were decided by a person and which were written by AI, with the records to check it against: [docs/how-this-was-built.md](docs/how-this-was-built.md). Every decision is logged with its author and time in [docs/human-decisions.md](docs/human-decisions.md) and [docs/ai-decisions.md](docs/ai-decisions.md).
