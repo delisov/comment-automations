@@ -7,6 +7,7 @@ import type {
 import type { AccountId, ConversationId, UserId } from '@comment-automations/shared';
 import { conversationId } from '@comment-automations/shared';
 import type { Selectable } from 'kysely';
+import { sql } from 'kysely';
 import type { CommentsTable, ConversationsTable, Db, MessagesTable } from './db/database.js';
 import { messageId, newId } from './ids.js';
 
@@ -63,6 +64,11 @@ export const openConversation = (
       opened_by: openedBy,
       last_user_message_at: lastUserMessageAt,
     })
+    .onConflict((conflict) =>
+      conflict.columns(['account_id', 'user_id']).doUpdateSet({
+        last_user_message_at: sql`coalesce(${lastUserMessageAt}, conversations.last_user_message_at)`,
+      }),
+    )
     .returningAll()
     .executeTakeFirstOrThrow();
 
