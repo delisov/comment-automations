@@ -37,6 +37,7 @@ export const stepTitle = (step: Step): string => {
 export const paletteEntry = (
   kind: StepKind,
   caps: CapabilitiesResponse,
+  privateReply: boolean,
 ): { title: string; subtitle: string } => {
   switch (kind) {
     case 'reply_to_comment':
@@ -45,8 +46,9 @@ export const paletteEntry = (
       const buttons = caps.record.messageLimits.buttons;
       return {
         title: 'Send a message',
-        subtitle:
-          buttons > 0
+        subtitle: privateReply
+          ? 'Private reply to the comment with text'
+          : buttons > 0
             ? `Direct message with text and up to ${buttons} buttons`
             : 'Direct message with text',
       };
@@ -161,8 +163,9 @@ export const MessageStep = ({
   issues,
   path,
   readOnly,
+  privateReply,
   onChange,
-}: StepProps<SendMessageStep>) => {
+}: StepProps<SendMessageStep> & { privateReply: boolean }) => {
   const limits = caps.record.messageLimits;
   const error = issueAt(issues, `${path}.text`);
   const fallbackError = issueAt(issues, `${path}.fallbackText`);
@@ -222,7 +225,9 @@ export const MessageStep = ({
         </div>
       ))}
       <ErrorText text={buttonsError} />
-      {!readOnly && step.buttons.length < limits.buttons ? (
+      {privateReply ? (
+        <div className="meta">Sent as a private reply to the comment · text only</div>
+      ) : !readOnly && step.buttons.length < limits.buttons ? (
         <div className="meta">
           <button
             type="button"
