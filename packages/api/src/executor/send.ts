@@ -75,6 +75,8 @@ export const gatewayFailure = (
     ALREADY_REPLIED: "Couldn't reply: this comment was already replied to",
     REPLY_WINDOW_CLOSED: privateReplyWindowClosed(loaded.record).message,
     MESSAGING_WINDOW_CLOSED: conversationWindowClosed(loaded.record, lastInboundAt).message,
+    MESSAGE_CAP_REACHED:
+      "Couldn't send: the platform caps messages in a row; the contact has to reply before the next one",
     RECIPIENT_UNREACHABLE: "Couldn't send: the contact doesn't accept messages from this account",
     ACCOUNT_DISCONNECTED: "Couldn't send: the account is disconnected",
     RATE_LIMITED: 'The platform rate-limited this account',

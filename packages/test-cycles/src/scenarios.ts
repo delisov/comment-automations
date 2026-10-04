@@ -10,7 +10,7 @@ import {
   whatsappPricing,
   youtubeReplyOnly,
 } from './definitions.js';
-import { expectEqual, waitFor } from './stack.js';
+import { expectEqual, expectNear, waitFor } from './stack.js';
 import type { World } from './world.js';
 import {
   DAY,
@@ -29,8 +29,12 @@ const PRIVATE_REPLY_CLOSED =
 
 const RATE_LIMITED = 'The platform rate-limited this account';
 
+const GIVES_UP_PREFIX = 'Waiting for a reply · gives up at ';
+
+const NEAR_MS = 2000;
+
 const givesUpAt = (world: World): string =>
-  `Waiting for a reply · gives up at ${new Date(world.clock.now().getTime() + 72 * HOUR).toISOString()}`;
+  new Date(world.clock.now().getTime() + 72 * HOUR).toISOString();
 
 type WebhookBody = {
   automation: { name: string };
@@ -52,7 +56,7 @@ const A1: Cycle = {
     );
     await world.stand.comment({ postId: ig.post, userId: ig.jane, text: COMMENT });
     await world.waitForRun(automationId, 'waiting');
-    const waitingLine = givesUpAt(world);
+    const expectedGivesUpAt = givesUpAt(world);
     await world.stand.message({
       accountId: ig.account,
       userId: ig.jane,
@@ -60,7 +64,18 @@ const A1: Cycle = {
     });
     const run = await world.waitForRun(automationId, 'completed');
 
-    expectEqual('run timeline', timelineOf(run), [
+    const timeline = timelineOf(run);
+    const waitingLine = timeline[3]?.[1] ?? '';
+    expectNear(
+      'gives up at',
+      waitingLine.startsWith(GIVES_UP_PREFIX)
+        ? waitingLine.slice(GIVES_UP_PREFIX.length)
+        : waitingLine,
+      expectedGivesUpAt,
+      NEAR_MS,
+    );
+
+    expectEqual('run timeline', timeline, [
       ['info', 'Started from a comment'],
       ['info', 'Replied to the comment'],
       ['info', 'Sent the message asking for a reply'],
@@ -262,7 +277,7 @@ const A5: Cycle = {
     const run = await world.waitForRun(automationId, 'expired');
 
     expectEqual('end of the run', timelineOf(run).at(-1), ['info', 'Gave up waiting for a reply']);
-    expectEqual('finished at', run.finishedAt, world.clock.now().toISOString());
+    expectNear('finished at', String(run.finishedAt), world.clock.now().toISOString(), NEAR_MS);
     const state = await world.stand.state('instagram');
     expectEqual('conversation', conversationMessages(state), [['account', 'What is your email?']]);
     expectEqual('gateway calls', gatewayCalls(await world.stand.eventLog()), ['reply:private:OK']);

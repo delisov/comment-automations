@@ -1,12 +1,13 @@
 import { Type } from '@sinclair/typebox';
 import type { Static } from '@sinclair/typebox';
 import { VersionIdSchema } from './ids.js';
-import { Timestamp } from './platform.js';
+
+const DateTime = Type.String({ format: 'date-time' });
 
 export const AnalyticsQuery = Type.Object({
   versionIds: Type.Optional(Type.Array(VersionIdSchema)),
-  since: Type.Optional(Timestamp),
-  until: Type.Optional(Timestamp),
+  since: Type.Optional(DateTime),
+  until: Type.Optional(DateTime),
 });
 
 export type AnalyticsQuery = Static<typeof AnalyticsQuery>;

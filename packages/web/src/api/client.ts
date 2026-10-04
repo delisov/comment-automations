@@ -58,9 +58,12 @@ const parseIssues = (body: unknown): ValidationIssue[] => {
 
 const parseMessage = (body: unknown, fallback: string): string => {
   if (typeof body === 'object' && body !== null) {
-    const message = (body as { message?: unknown }).message;
+    const { message, error } = body as { message?: unknown; error?: unknown };
     if (typeof message === 'string') {
       return message;
+    }
+    if (typeof error === 'string') {
+      return error;
     }
   }
   return fallback;
@@ -69,7 +72,11 @@ const parseMessage = (body: unknown, fallback: string): string => {
 const request = async <T>(path: string, init?: RequestInit): Promise<T> => {
   const response = await fetch(path, {
     ...init,
-    headers: { accept: 'application/json', 'content-type': 'application/json', ...init?.headers },
+    headers: {
+      accept: 'application/json',
+      ...(init?.body === undefined ? {} : { 'content-type': 'application/json' }),
+      ...init?.headers,
+    },
   });
   const text = await response.text();
   const body: unknown = text === '' ? null : JSON.parse(text);

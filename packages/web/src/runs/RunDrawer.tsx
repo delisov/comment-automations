@@ -1,10 +1,10 @@
 import type { RunDetail, RunLogEntry, RunStatus } from '@comment-automations/api-schema';
 import type { RunId } from '@comment-automations/shared';
-import { useState } from 'react';
-import { api } from '../api/client.js';
+import { useCallback, useState } from 'react';
+import { api, ApiError } from '../api/client.js';
 import { formatDateTime, formatTime } from '../format.js';
-import type { PillTone } from '../ui.js';
-import { Button, Callout, Pill } from '../ui.js';
+import type { PillTone, ToastMessage } from '../ui.js';
+import { Button, Callout, Pill, Toast } from '../ui.js';
 import { useAsync } from '../useAsync.js';
 
 export const statusLabel: Record<RunStatus, string> = {
@@ -58,11 +58,21 @@ export const RunDrawer = ({
 }) => {
   const run = useAsync(() => api.run(runId), [runId]);
   const [stopping, setStopping] = useState(false);
+  const [toast, setToast] = useState<ToastMessage | null>(null);
+  const clearToast = useCallback(() => setToast(null), []);
   const stop = async (detail: RunDetail) => {
     setStopping(true);
     try {
       run.setData(await api.stopRun(detail.id));
       onChanged();
+    } catch (failure) {
+      setToast({
+        tone: 'bad',
+        text:
+          failure instanceof ApiError
+            ? failure.message
+            : 'Couldn’t stop the run. Check your connection and try again.',
+      });
     } finally {
       setStopping(false);
     }
@@ -157,6 +167,7 @@ export const RunDrawer = ({
           ) : null}
         </>
       )}
+      <Toast toast={toast} onDone={clearToast} />
     </div>
   );
 };

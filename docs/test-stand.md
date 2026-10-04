@@ -30,6 +30,7 @@ Everything the automation service can do has an observable effect in the stand. 
 | Email extracted and templated into the link | The second message in the conversation contains the link with the captured value |
 | Outbound customer webhook | The stand's webhook receiver shows the body |
 | Conversation window closed | A message after the window is refused with the platform error; the run records it |
+| Consecutive message cap (TikTok) | The eleventh account message before the user writes again is refused with `MESSAGE_CAP_REACHED`; the run records it |
 | Supersede | A second comment by the same user while a run waits: the old run is `superseded`, one conversation continues |
 | Duplicate event delivered twice | One run, one reply. The stand's log shows two deliveries |
 | Events reordered | Same final state as in order |
