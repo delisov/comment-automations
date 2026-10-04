@@ -10,7 +10,7 @@ Three things in one service, plus a web interface:
 
 1. **Platform worlds.** One emulated world per supported platform: accounts owned by customers, posts on those accounts, users of the platform, comments on posts, conversations between users and accounts. Each world enforces its platform's rules the way the real platform does, independently of how the automation service models them (AD-012).
 2. **The gateway side of the contract.** The stand implements the gateway HTTP API from `packages/gateway-contract`: the automation service calls it to reply to comments and send messages, and it calls the automation service's ingestion endpoint to deliver comment and message events, with knobs for duplicates, reordering, delay and bursts.
-3. **A scenario API.** Create accounts, posts and users; act as a user (comment, reply, message, change messaging settings); advance the clock (AD-013); read everything back.
+3. **A scenario API.** Create accounts, posts and users; act as a user (comment, reply, message, change messaging settings); advance the clock (AD-013); read everything back; restore the starting world and set both clocks to now without touching the service's automations.
 
 The web interface (the portal) opens each social network separately and shows its accounts, its users, the posts with their comment threads, each account's inbox, and each user's direct messages. An event log shows everything that crossed the contract in either direction, with the gateway error returned for every refused call. **User-emulation mode** lets a person pick an emulated user and act as them: comment, reply, message, change messaging settings. The rule is visibility into every aspect (HD-026): if the service can do it, the portal shows it.
 

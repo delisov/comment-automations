@@ -5,7 +5,10 @@ import type { Context } from '../context.js';
 
 type ServiceAnswer = { status: number; body: unknown } | { error: string };
 
-const forwardClock = async (ctx: Context, body: ClockRequestType): Promise<ServiceAnswer> => {
+export const forwardClock = async (
+  ctx: Context,
+  body: ClockRequestType,
+): Promise<ServiceAnswer> => {
   try {
     const response = await fetch(`${ctx.serviceUrl}/test/clock`, {
       method: 'POST',

@@ -8,9 +8,11 @@ type Props = {
   standNow: string;
   onClock: (now: string) => void;
   onShift: (ms: number) => void;
-  onReset: () => void;
-  onSeed: () => void;
+  onRestore: () => void;
 };
+
+const RESTORE_PROMPT =
+  'Reset the test stand? This deletes all comments and messages and restores the starting accounts, posts and users. Your automations are kept.';
 
 const HOUR = 60 * 60 * 1000;
 
@@ -30,8 +32,7 @@ export const TopBar = ({
   standNow,
   onClock,
   onShift,
-  onReset,
-  onSeed,
+  onRestore,
 }: Props) => {
   const diverged =
     Boolean(now && standNow) && Math.abs(Date.parse(now) - Date.parse(standNow)) > 1000;
@@ -70,11 +71,15 @@ export const TopBar = ({
             }
           }}
         />
-        <button className="danger" onClick={onReset}>
+        <button
+          className="danger"
+          onClick={() => {
+            if (window.confirm(RESTORE_PROMPT)) {
+              onRestore();
+            }
+          }}
+        >
           Reset
-        </button>
-        <button className="primary" onClick={onSeed}>
-          Seed
         </button>
       </div>
     </div>
