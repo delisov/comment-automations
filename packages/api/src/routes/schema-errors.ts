@@ -9,7 +9,7 @@ export type SchemaIssuesError = Error & { issues: ValidationIssue[]; validationC
 
 const SHAPE_KEYWORDS = new Set(['anyOf', 'const', 'enum', 'required']);
 
-const NON_BLANK_PATTERN = '\\S';
+const NON_BLANK_PATTERN = '[^\\s\\u200B-\\u200D\\u2060\\uFEFF]';
 
 const ISSUE_ROUTES = new Set(['PUT /automations/:id/draft', 'POST /automations/:id/publish']);
 

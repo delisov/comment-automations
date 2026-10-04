@@ -10,7 +10,6 @@ import { resetWorlds, seedWorlds } from '../seed.js';
 import {
   addMessage,
   commentEvent,
-  findConversation,
   messageEvent,
   openConversation,
   readSettings,
@@ -273,15 +272,7 @@ export const scenarioRoutes: FastifyPluginAsyncTypebox<{ ctx: Context }> = async
         return notFound(reply, 'user');
       }
       const now = clock.now();
-      const existing = await findConversation(db, account.id, user.id);
-      const conversation = existing
-        ? await db
-            .updateTable('conversations')
-            .set({ last_user_message_at: now })
-            .where('id', '=', existing.id)
-            .returningAll()
-            .executeTakeFirstOrThrow()
-        : await openConversation(db, account.id, user.id, 'user', now);
+      const conversation = await openConversation(db, account.id, user.id, 'user', now);
       const message = await addMessage(db, {
         conversationId: conversation.id,
         from: 'user',
