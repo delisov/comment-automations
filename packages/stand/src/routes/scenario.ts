@@ -350,7 +350,7 @@ export const scenarioRoutes: FastifyPluginAsyncTypebox<{ ctx: Context }> = async
               'in',
               conversations.map((conversation) => conversation.id),
             )
-            .orderBy('created_at')
+            .orderBy('seq')
             .execute();
     return {
       accounts,

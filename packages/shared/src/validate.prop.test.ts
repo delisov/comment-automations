@@ -5,6 +5,7 @@ import {
   allowedStepKinds,
   allowedTriggers,
   canRemindBeforeReply,
+  deliveredAsPrivateReply,
   nextAllowedStepKinds,
   requiresUnreachableChoice,
 } from './capabilities.js';
@@ -57,7 +58,12 @@ const windowHours = (record: CapabilityRecord): number =>
     ? Number.POSITIVE_INFINITY
     : record.conversationWindow.durationMs / 3_600_000;
 
-const stepOfKind = (kind: StepKind, record: CapabilityRecord): fc.Arbitrary<Step> => {
+const stepOfKind = (
+  kind: StepKind,
+  record: CapabilityRecord,
+  trigger: Trigger,
+  stepsSoFar: Step[],
+): fc.Arbitrary<Step> => {
   switch (kind) {
     case 'reply_to_comment':
       return fc.record({ kind: fc.constant(kind), text: text(record.replyLimits.maxChars) });
@@ -65,7 +71,11 @@ const stepOfKind = (kind: StepKind, record: CapabilityRecord): fc.Arbitrary<Step
       return fc.record({
         kind: fc.constant(kind),
         text: text(record.messageLimits.maxChars),
-        buttons: fc.array(button, { maxLength: record.messageLimits.buttons }),
+        buttons: fc.array(button, {
+          maxLength: deliveredAsPrivateReply(record, trigger, stepsSoFar)
+            ? 0
+            : record.messageLimits.buttons,
+        }),
         onUnreachable: requiresUnreachableChoice(record)
           ? fc.constantFrom('fail' as const, 'skip' as const)
           : fc.constant(undefined),
@@ -120,7 +130,7 @@ const stepsFrom = (
     ? fc.constant(stepsSoFar)
     : fc
         .constantFrom(...nextAllowedStepKinds(record, trigger, stepsSoFar))
-        .chain((kind) => stepOfKind(kind, record))
+        .chain((kind) => stepOfKind(kind, record, trigger, stepsSoFar))
         .chain((step) => stepsFrom(record, trigger, [...stepsSoFar, step], remaining - 1));
 
 const buildableDefinition = (record: CapabilityRecord): fc.Arbitrary<Definition> =>
@@ -170,7 +180,9 @@ describe('validateDefinition invariants', () => {
             return fc.constantFrom(...positions).chain((index) =>
               fc
                 .constantFrom(...outsideAt(index))
-                .chain((kind) => stepOfKind(kind, record))
+                .chain((kind) =>
+                  stepOfKind(kind, record, definition.trigger, definition.steps.slice(0, index)),
+                )
                 .map((foreignStep) => [name, definition, index, foreignStep] as const),
             );
           });

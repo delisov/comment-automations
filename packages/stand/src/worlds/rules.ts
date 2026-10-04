@@ -85,7 +85,7 @@ export const refuseMessage = (rules: Rules, attempt: MessageAttempt): GatewayErr
   }
   const cap = rules.messaging.maxConsecutiveAccountMessages;
   if (cap !== null && accountMessagesSinceUser >= cap) {
-    return 'MESSAGING_WINDOW_CLOSED';
+    return 'MESSAGE_CAP_REACHED';
   }
   return null;
 };

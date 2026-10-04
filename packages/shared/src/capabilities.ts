@@ -62,6 +62,27 @@ const stepsSinceLastMessage = (stepsSoFar: Step[]): Step[] | null => {
   return lastMessage === -1 ? null : stepsSoFar.slice(lastMessage + 1);
 };
 
+const messagesSinceLastWait = (stepsSoFar: Step[]): number => {
+  const lastWait = stepsSoFar.map((step) => step.kind).lastIndexOf('wait_for_reply');
+  return stepsSoFar.slice(lastWait + 1).filter((step) => step.kind === 'send_message').length;
+};
+
+export const consecutiveMessageCapReached = (
+  record: CapabilityRecord,
+  stepsSoFar: Step[],
+): boolean =>
+  record.maxConsecutiveMessages !== undefined &&
+  messagesSinceLastWait(stepsSoFar) >= record.maxConsecutiveMessages;
+
+export const deliveredAsPrivateReply = (
+  record: CapabilityRecord,
+  trigger: Trigger,
+  stepsSoFar: Step[],
+): boolean =>
+  record.commenterIsMessageable === 'viaPrivateReplyOnly' &&
+  trigger.comments !== undefined &&
+  !stepsSoFar.some((step) => step.kind === 'wait_for_reply');
+
 export const nextAllowedStepKinds = (
   record: CapabilityRecord,
   trigger: Trigger,
@@ -76,9 +97,10 @@ export const nextAllowedStepKinds = (
   }
   if (canMessage(record)) {
     if (
-      record.commenterIsMessageable !== 'viaPrivateReplyOnly' ||
-      sinceMessage === null ||
-      waitedSinceMessage
+      (record.commenterIsMessageable !== 'viaPrivateReplyOnly' ||
+        sinceMessage === null ||
+        waitedSinceMessage) &&
+      !consecutiveMessageCapReached(record, stepsSoFar)
     ) {
       kinds.push('send_message');
     }

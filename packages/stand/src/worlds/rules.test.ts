@@ -174,10 +174,10 @@ describe.each([
           rules,
           message({ conversation: { lastUserMessageAt: t0, accountMessagesSinceUser: count } }),
         );
-      expect(consecutive(50)).toBe(cap === null ? null : 'MESSAGING_WINDOW_CLOSED');
+      expect(consecutive(50)).toBe(cap === null ? null : 'MESSAGE_CAP_REACHED');
       if (cap !== null) {
         expect(consecutive(cap - 1)).toBeNull();
-        expect(consecutive(cap)).toBe('MESSAGING_WINDOW_CLOSED');
+        expect(consecutive(cap)).toBe('MESSAGE_CAP_REACHED');
       }
     },
   );

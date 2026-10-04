@@ -188,3 +188,14 @@ describe('product API schemas', () => {
     expect(Value.Check(schema.AutomationDetail, { ...detail, draft: { steps: [] } })).toBe(false);
   });
 });
+
+describe('AnalyticsQuery', () => {
+  it('declares since and until as date-time strings so the server rejects garbage with 400', () => {
+    expect(schema.AnalyticsQuery.properties.since).toEqual(
+      expect.objectContaining({ type: 'string', format: 'date-time' }),
+    );
+    expect(schema.AnalyticsQuery.properties.until).toEqual(
+      expect.objectContaining({ type: 'string', format: 'date-time' }),
+    );
+  });
+});
