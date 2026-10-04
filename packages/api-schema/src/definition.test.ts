@@ -63,3 +63,28 @@ describe('DefinitionSchema', () => {
     ).toBe(false);
   });
 });
+
+describe('WaitForReplyStepSchema bounds', () => {
+  const wait = (giveUpHours: number, afterHours?: number) => ({
+    ...example,
+    steps: [
+      {
+        kind: 'wait_for_reply',
+        expect: 'any',
+        giveUpHours,
+        ...(afterHours === undefined ? {} : { reminder: { afterHours, text: 'Still there?' } }),
+      },
+    ],
+  });
+
+  it('keeps the give-up and reminder hours whole numbers from 1 to 720', () => {
+    expect(Value.Check(DefinitionSchema, wait(720, 1))).toBe(true);
+    expect(Value.Check(DefinitionSchema, wait(1e10))).toBe(false);
+    expect(Value.Check(DefinitionSchema, wait(721))).toBe(false);
+    expect(Value.Check(DefinitionSchema, wait(0))).toBe(false);
+    expect(Value.Check(DefinitionSchema, wait(0.5))).toBe(false);
+    expect(Value.Check(DefinitionSchema, wait(720, 1e12))).toBe(false);
+    expect(Value.Check(DefinitionSchema, wait(720, 0))).toBe(false);
+    expect(Value.Check(DefinitionSchema, wait(720, 1.5))).toBe(false);
+  });
+});

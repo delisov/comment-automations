@@ -3,6 +3,8 @@ import {
   allowedStepKinds,
   allowedTriggers,
   canRemindBeforeReply,
+  consecutiveMessageCapReached,
+  deliveredAsPrivateReply,
   nextAllowedStepKinds,
   requiresUnreachableChoice,
 } from './capabilities.js';
@@ -11,17 +13,25 @@ import type {
   Definition,
   ReplyToCommentStep,
   SendMessageStep,
+  Step,
   StepKind,
   Trigger,
   WaitForReplyStep,
 } from './definition.js';
-import { WEBHOOK_METHODS } from './definition.js';
+import { MAX_WAIT_HOURS, WEBHOOK_METHODS } from './definition.js';
 import { hoursToMs } from './durations.js';
+import { isMatchableKeyword } from './keywords.js';
 import { PLATFORM_LABELS } from './platform.js';
+import { longestTemplateVars, renderTemplate } from './template.js';
 
 export type ValidationIssue = { path: string; code: string; message: string };
 
-type StepContext = { record: CapabilityRecord; trigger: Trigger; emailCaptured: boolean };
+type StepContext = {
+  record: CapabilityRecord;
+  trigger: Trigger;
+  stepsSoFar: Step[];
+  emailCaptured: boolean;
+};
 
 const PLACEHOLDER = /\{\{([^}]*)\}\}/g;
 
@@ -34,9 +44,26 @@ const NOT_ALLOWED_HERE: Record<StepKind, string> = {
   call_webhook: 'Calling a webhook is allowed at every position',
 };
 
-const charCount = (text: string): number => [...text].length;
+const notAllowedHereMessage = (
+  kind: StepKind,
+  record: CapabilityRecord,
+  stepsSoFar: Step[],
+): string =>
+  kind === 'send_message' && consecutiveMessageCapReached(record, stepsSoFar)
+    ? `${PLATFORM_LABELS[record.platform]} allows at most ${String(record.maxConsecutiveMessages)} messages in a row before the contact replies`
+    : NOT_ALLOWED_HERE[kind];
+
+const charCount = (text: string): number => text.length;
 
 const byteCount = (text: string): number => new TextEncoder().encode(text).length;
+
+const lengthMessage = (filledIn: boolean, count: number, unit: string, limit: number): string =>
+  filledIn
+    ? `Text may be ${count} ${unit} once filled in, the limit is ${limit}`
+    : `Text is ${count} ${unit}, the limit is ${limit}`;
+
+const wholeHours = (hours: number, max: number): boolean =>
+  Number.isInteger(hours) && hours >= 1 && hours <= max;
 
 const isHttpUrl = (url: string): boolean => {
   try {
@@ -78,25 +105,40 @@ const textIssues = (
   emailCaptured: boolean,
 ): ValidationIssue[] => {
   const issues: ValidationIssue[] = [];
+  const filled = renderTemplate(text, longestTemplateVars);
+  const filledIn = filled !== text;
   if (text.trim() === '') {
     issues.push({ path, code: 'TEXT_REQUIRED', message: 'Text must not be empty' });
-  } else if (charCount(text) > limits.maxChars) {
+  } else if (charCount(filled) > limits.maxChars) {
     issues.push({
       path,
       code: 'TEXT_TOO_LONG',
-      message: `Text is ${charCount(text)} characters, the limit is ${limits.maxChars}`,
+      message: lengthMessage(filledIn, charCount(filled), 'characters', limits.maxChars),
     });
   }
-  if (limits.maxBytes !== undefined && byteCount(text) > limits.maxBytes) {
+  if (limits.maxBytes !== undefined && byteCount(filled) > limits.maxBytes) {
     issues.push({
       path,
       code: 'TEXT_TOO_MANY_BYTES',
-      message: `Text is ${byteCount(text)} bytes in UTF-8, the limit is ${limits.maxBytes}`,
+      message: lengthMessage(filledIn, byteCount(filled), 'bytes in UTF-8', limits.maxBytes),
     });
   }
   issues.push(...placeholderIssues(text, path, emailCaptured));
   return issues;
 };
+
+const keywordIssues = (keywords: string[], path: string): ValidationIssue[] =>
+  keywords.flatMap((keyword, index) =>
+    isMatchableKeyword(keyword)
+      ? []
+      : [
+          {
+            path: `${path}.${index}`,
+            code: 'KEYWORD_UNMATCHABLE',
+            message: 'A keyword needs at least one letter, number or emoji',
+          },
+        ],
+  );
 
 const triggerIssues = (trigger: Trigger, record: CapabilityRecord): ValidationIssue[] => {
   const issues: ValidationIssue[] = [];
@@ -125,14 +167,20 @@ const triggerIssues = (trigger: Trigger, record: CapabilityRecord): ValidationIs
         code: 'KEYWORDS_REQUIRED',
         message: 'A comments trigger on any post needs at least one keyword',
       });
+    } else {
+      issues.push(...keywordIssues(trigger.comments.keywords, 'trigger.comments.keywords'));
     }
   }
-  if (trigger.messages !== undefined && !allowed.messages) {
-    issues.push({
-      path: 'trigger.messages',
-      code: 'TRIGGER_NOT_SUPPORTED',
-      message: `${label} has no conversation window for inbound messages`,
-    });
+  if (trigger.messages !== undefined) {
+    if (!allowed.messages) {
+      issues.push({
+        path: 'trigger.messages',
+        code: 'TRIGGER_NOT_SUPPORTED',
+        message: `${label} has no conversation window for inbound messages`,
+      });
+    } else {
+      issues.push(...keywordIssues(trigger.messages.keywords, 'trigger.messages.keywords'));
+    }
   }
   return issues;
 };
@@ -223,6 +271,22 @@ const unreachableIssues = (
   return issues;
 };
 
+const privateReplyButtonIssues = (
+  step: SendMessageStep,
+  path: string,
+  { record, trigger, stepsSoFar }: StepContext,
+): ValidationIssue[] =>
+  step.buttons.length > 0 && deliveredAsPrivateReply(record, trigger, stepsSoFar)
+    ? [
+        {
+          path,
+          code: 'BUTTONS_IN_PRIVATE_REPLY',
+          message:
+            'This message is delivered as a private reply to the comment, which cannot carry buttons',
+        },
+      ]
+    : [];
+
 const messageIssues = (
   step: SendMessageStep,
   path: string,
@@ -230,6 +294,7 @@ const messageIssues = (
 ): ValidationIssue[] => [
   ...textIssues(step.text, `${path}.text`, context.record.messageLimits, context.emailCaptured),
   ...buttonIssues(step.buttons, `${path}.buttons`, context.record.messageLimits),
+  ...privateReplyButtonIssues(step, `${path}.buttons`, context),
   ...unreachableIssues(step, path, context),
 ];
 
@@ -239,11 +304,11 @@ const waitIssues = (
   { record, emailCaptured }: StepContext,
 ): ValidationIssue[] => {
   const issues: ValidationIssue[] = [];
-  if (!(step.giveUpHours > 0)) {
+  if (!wholeHours(step.giveUpHours, MAX_WAIT_HOURS)) {
     issues.push({
       path: `${path}.giveUpHours`,
       code: 'GIVE_UP_HOURS_INVALID',
-      message: 'The give-up time must be more than zero hours',
+      message: `The give-up time is a whole number of hours from 1 to ${MAX_WAIT_HOURS}`,
     });
   }
   if (step.reminder !== undefined) {
@@ -254,12 +319,12 @@ const waitIssues = (
         message: `${PLATFORM_LABELS[record.platform]} does not allow a second message before the contact replies`,
       });
     } else {
-      if (!(step.reminder.afterHours > 0 && step.reminder.afterHours < step.giveUpHours)) {
+      if (!wholeHours(step.reminder.afterHours, step.giveUpHours - 1)) {
         issues.push({
           path: `${path}.reminder.afterHours`,
           code: 'REMINDER_DELAY_INVALID',
           message:
-            'The reminder must go out after more than zero hours and before the give-up time',
+            'The reminder must go out a whole number of hours after the message, at least one and before the give-up time',
         });
       } else if (
         record.conversationWindow !== null &&
@@ -327,10 +392,15 @@ const stepIssues = (definition: Definition, record: CapabilityRecord): Validatio
       issues.push({
         path: `${path}.kind`,
         code: 'STEP_NOT_ALLOWED_HERE',
-        message: NOT_ALLOWED_HERE[step.kind],
+        message: notAllowedHereMessage(step.kind, record, stepsSoFar),
       });
     }
-    const context: StepContext = { record, trigger: definition.trigger, emailCaptured };
+    const context: StepContext = {
+      record,
+      trigger: definition.trigger,
+      stepsSoFar,
+      emailCaptured,
+    };
     switch (step.kind) {
       case 'reply_to_comment':
         issues.push(...replyIssues(step, path, context));

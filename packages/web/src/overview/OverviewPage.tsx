@@ -32,10 +32,12 @@ const StatePill = ({
 const Table = ({
   automations,
   accounts,
+  now,
   onOpen,
 }: {
   automations: AutomationSummary[];
   accounts: Account[];
+  now: number;
   onOpen: (automation: AutomationSummary) => void;
 }) => (
   <div className="tbl">
@@ -87,7 +89,7 @@ const Table = ({
                   '—'
                 )}
               </td>
-              <td className="mono">{formatRelative(automation.stats.lastRunAt)}</td>
+              <td className="mono">{formatRelative(automation.stats.lastRunAt, now)}</td>
               <td style={{ color: '#9ca3af' }}>›</td>
             </tr>
           );
@@ -101,6 +103,8 @@ export const OverviewPage = () => {
   const navigate = useNavigate();
   const automations = useAsync(() => api.automations(), []);
   const accounts = useAsync(() => api.accounts(), []);
+  const clock = useAsync(() => api.clock(), []);
+  const now = clock.status === 'ready' ? new Date(clock.data.now).getTime() : Date.now();
   const [accountFilter, setAccountFilter] = useState<AccountId | ''>('');
   const [search, setSearch] = useState('');
   const [creating, setCreating] = useState(false);
@@ -212,6 +216,7 @@ export const OverviewPage = () => {
         <Table
           automations={matching}
           accounts={accountList}
+          now={now}
           onOpen={(automation) => navigate(`/automations/${automation.id}`)}
         />
       )}

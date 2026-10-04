@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { matchesKeywords } from './keywords.js';
+import { isMatchableKeyword, matchesKeywords } from './keywords.js';
 
 describe('matchesKeywords', () => {
   it('matches a whole word regardless of case', () => {
@@ -54,5 +54,28 @@ describe('matchesKeywords', () => {
 
   it('never matches a keyword that has no letters, digits or emoji', () => {
     expect(matchesKeywords('!!! ???', ['!!!'])).toBe(false);
+  });
+});
+
+describe('matchesKeywords normalisation', () => {
+  it('matches across Unicode normalisation forms and emoji variation selectors', () => {
+    expect(matchesKeywords('café please', ['café'])).toBe(true);
+    expect(matchesKeywords('café please', ['café'])).toBe(true);
+    expect(matchesKeywords('love it ❤️', ['❤'])).toBe(true);
+    expect(matchesKeywords('love it ❤', ['❤️'])).toBe(true);
+  });
+});
+
+describe('isMatchableKeyword', () => {
+  it('needs at least one letter, number or emoji', () => {
+    expect(isMatchableKeyword('pricing')).toBe(true);
+    expect(isMatchableKeyword('价格')).toBe(true);
+    expect(isMatchableKeyword('42')).toBe(true);
+    expect(isMatchableKeyword('🔥')).toBe(true);
+    expect(isMatchableKeyword('❤️')).toBe(true);
+    expect(isMatchableKeyword('')).toBe(false);
+    expect(isMatchableKeyword('   ')).toBe(false);
+    expect(isMatchableKeyword('!!!')).toBe(false);
+    expect(isMatchableKeyword('️')).toBe(false);
   });
 });

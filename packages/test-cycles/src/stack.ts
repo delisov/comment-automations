@@ -197,3 +197,15 @@ export const expectEqual = <T>(what: string, actual: T, expected: T): void => {
     throw new Error(`${what}: expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`);
   }
 };
+
+export const expectNear = (
+  what: string,
+  actual: string,
+  expected: string,
+  toleranceMs: number,
+): void => {
+  const difference = Math.abs(Date.parse(actual) - Date.parse(expected));
+  if (!(difference <= toleranceMs)) {
+    throw new Error(`${what}: expected ${expected} within ${toleranceMs}ms, got ${actual}`);
+  }
+};
