@@ -11,6 +11,6 @@ export const bluesky: CapabilityRecord = {
   reminderBeforeReply: true,
   messageLimits: { maxChars: 10000, buttons: 0, linksInText: true },
   replyLimits: { maxChars: 300 },
-  ownActivityEcho: false,
+  ownActivityEcho: true,
   access: 'selfServe',
 };

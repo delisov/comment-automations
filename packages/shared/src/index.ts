@@ -33,6 +33,7 @@ export {
   allowedStepKinds,
   allowedTriggers,
   canRemindBeforeReply,
+  nextAllowedStepKinds,
   requiresUnreachableChoice,
 } from './capabilities.js';
 export type {

@@ -11,6 +11,6 @@ export const x: CapabilityRecord = {
   reminderBeforeReply: true,
   messageLimits: { maxChars: 10000, buttons: 0, linksInText: true },
   replyLimits: { maxChars: 280 },
-  ownActivityEcho: false,
+  ownActivityEcho: true,
   access: 'paidTier',
 };
