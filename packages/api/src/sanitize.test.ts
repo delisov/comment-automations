@@ -16,6 +16,12 @@ describe('sanitizeStrings', () => {
     });
   });
 
+  it('sanitizes object keys the same way as values', () => {
+    expect(
+      sanitizeStrings({ 'k\u0000': 1, 'a\ud800b': { 'x\u0000y': ['v\u0000'] }, '😀': true }),
+    ).toEqual({ k: 1, 'a�b': { xy: ['v'] }, '😀': true });
+  });
+
   it('leaves values that are not strings or containers alone', () => {
     expect([sanitizeStrings(undefined), sanitizeStrings(3), sanitizeStrings(null)]).toEqual([
       undefined,
