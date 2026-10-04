@@ -12,7 +12,7 @@ export const sanitizeStrings = <T>(value: T): T => {
   }
   if (typeof value === 'object' && value !== null) {
     return Object.fromEntries(
-      Object.entries(value).map(([key, entry]) => [key, sanitizeStrings(entry)]),
+      Object.entries(value).map(([key, entry]) => [sanitizeString(key), sanitizeStrings(entry)]),
     ) as T;
   }
   return value;
