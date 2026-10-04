@@ -1,0 +1,25 @@
+services:
+  postgres:
+    restart: unless-stopped
+  api:
+    restart: unless-stopped
+    environment:
+      SERVICE_TOKEN: ${SERVICE_TOKEN:?set SERVICE_TOKEN in deploy/.env}
+      WEBHOOK_ALLOW_PRIVATE: 'false'
+  stand:
+    restart: unless-stopped
+    environment:
+      SERVICE_TOKEN: ${SERVICE_TOKEN:?set SERVICE_TOKEN in deploy/.env}
+  edge:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    ports:
+      - '80:80'
+    volumes:
+      - ./deploy/edge.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./deploy/site:/usr/share/nginx/html:ro
+    depends_on:
+      api:
+        condition: service_healthy
+      stand:
+        condition: service_healthy
