@@ -372,8 +372,8 @@ describe.skipIf(!databaseUrl)('stand against a real database', () => {
       expect((await send(n)).statusCode).toBe(200);
     }
     const eleventh = await send(11);
-    expect(eleventh.statusCode).toBe(403);
-    expect(eleventh.json().code).toBe('MESSAGING_WINDOW_CLOSED');
+    expect(eleventh.statusCode).toBe(409);
+    expect(eleventh.json().code).toBe('MESSAGE_CAP_REACHED');
 
     await scenario('POST', '/scenario/messages', {
       accountId: 'tiktok_oqtastore',
@@ -381,6 +381,36 @@ describe.skipIf(!databaseUrl)('stand against a real database', () => {
       text: 'ok',
     });
     expect((await send(12)).statusCode).toBe(200);
+  });
+
+  it('lists conversation messages in the order they were sent even after the clock moved back', async () => {
+    const userMessage = (
+      await scenario('POST', '/scenario/messages', {
+        accountId: 'tiktok_oqtastore',
+        userId: 'tiktok_desktop_dan',
+        text: 'hi',
+      })
+    ).json<{ conversation_id: string }>();
+    clock.set(new Date(t0.getTime() - hours(1)));
+    expect(
+      (
+        await gateway('POST', '/gateway/messages', {
+          accountId: 'tiktok_oqtastore',
+          recipient: { conversationId: userMessage.conversation_id },
+          text: 'Welcome back',
+          idempotencyKey: 'run_7:0:message',
+        })
+      ).statusCode,
+    ).toBe(200);
+
+    const state = (await scenario('GET', '/scenario/state?platform=tiktok')).json<{
+      conversations: { id: string; messages: { from: string; text: string }[] }[];
+    }>();
+    const conversation = state.conversations.find((c) => c.id === userMessage.conversation_id);
+    expect(conversation?.messages.map(({ from, text }) => ({ from, text }))).toEqual([
+      { from: 'user', text: 'hi' },
+      { from: 'account', text: 'Welcome back' },
+    ]);
   });
 
   it('a burst makes the next gateway calls answer RATE_LIMITED and then recovers', async () => {

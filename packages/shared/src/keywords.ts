@@ -1,9 +1,18 @@
-const WORD = /[\p{L}\p{M}\p{N}]+|\p{Extended_Pictographic}(?:️|‍\p{Extended_Pictographic})*/gu;
+const WORD = /[\p{L}\p{M}\p{N}]+|\p{Extended_Pictographic}(?:‍\p{Extended_Pictographic})*/gu;
 
 const UNSPACED_SCRIPTS =
   /^[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Thai}\p{Script=Lao}\p{Script=Khmer}\p{Script=Myanmar}]+$/u;
 
-const normalizeWords = (text: string): string => (text.match(WORD) ?? []).join(' ').toLowerCase();
+const MATCHABLE = /[\p{L}\p{N}\p{Extended_Pictographic}]/u;
+
+const VARIATION_SELECTORS = /[︎️]/gu;
+
+const normalizeWords = (text: string): string =>
+  (text.normalize('NFC').replace(VARIATION_SELECTORS, '').match(WORD) ?? [])
+    .join(' ')
+    .toLowerCase();
+
+export const isMatchableKeyword = (keyword: string): boolean => MATCHABLE.test(keyword);
 
 export const matchesKeywords = (text: string, keywords: string[]): boolean => {
   if (keywords.length === 0) {

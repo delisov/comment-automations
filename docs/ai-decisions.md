@@ -196,3 +196,12 @@ Format:
 - Why: A frozen clock made every timestamp in both UIs equal to the seed time until someone advanced it, so every timeline looked identical.
 - Affects: shared clock, api and stand test routes
 - Status: active
+
+## AD-021  Text length is measured in UTF-16 code units on both sides
+- When: 2026-10-04T14:00+03:00
+- Who: Claude (Fable 5.1), session ffba4ca6
+- Where: QA round 1
+- Decision: `validateDefinition` and the stand's world rules both count text length as UTF-16 code units, which is what `String.prototype.length` returns. The validator measures the worst case: the template rendered with the longest value each placeholder can take (`{{email}}` 254, `{{contact.handle}}` 30), in code units and in UTF-8 bytes, and says in the issue that the text may exceed the limit once filled in. `giveUpHours` and `reminder.afterHours` are whole numbers of hours from 1 to 720 in the API schema and in the validator.
+- Why: The validator counted code points and the stand counted code units, so `"😀"` repeated 600 times published on Instagram and failed at run time with `MESSAGE_TOO_LONG`. Code units are the conservative unit: no string that passes validation can be longer on the wire by any count the platforms use. Placeholders were counted literally, so a text that fits as a template overflowed once the email was filled in. A give-up time of 1e12 hours passed publish and crashed the timer arithmetic.
+- Affects: packages/shared (validate.ts, template.ts, definition.ts), packages/api-schema definition.ts, docs/architecture.md section 4
+- Status: active

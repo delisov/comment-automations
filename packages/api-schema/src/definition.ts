@@ -1,8 +1,11 @@
+import { MAX_WAIT_HOURS } from '@comment-automations/shared';
 import { Type } from '@sinclair/typebox';
 import type { Static } from '@sinclair/typebox';
 import { PostIdSchema } from './ids.js';
 
 const Text = Type.String({ maxLength: 10_000 });
+
+const Hours = Type.Integer({ minimum: 1, maximum: MAX_WAIT_HOURS });
 
 const Url = Type.String({ maxLength: 2048 });
 
@@ -58,8 +61,8 @@ export const SendMessageStepSchema = Type.Object({
 export const WaitForReplyStepSchema = Type.Object({
   kind: Type.Literal('wait_for_reply'),
   expect: Type.Union([Type.Literal('email'), Type.Literal('any')]),
-  giveUpHours: Type.Number(),
-  reminder: Type.Optional(Type.Object({ afterHours: Type.Number(), text: Text })),
+  giveUpHours: Hours,
+  reminder: Type.Optional(Type.Object({ afterHours: Hours, text: Text })),
   nudge: Type.Optional(
     Type.Object({
       text: Text,
