@@ -17,6 +17,11 @@ export const issueAt = (issues: ValidationIssue[], path: string): string | null 
 export const issuesUnder = (issues: ValidationIssue[], path: string): ValidationIssue[] =>
   issues.filter((item) => item.path === path || item.path.startsWith(`${path}.`));
 
+export const unplacedIssues = (issues: ValidationIssue[]): ValidationIssue[] =>
+  issues.filter(
+    (issue) => issuesUnder([issue], 'trigger').length + issuesUnder([issue], 'steps').length === 0,
+  );
+
 export const ErrorText = ({ text }: { text: string | null }) =>
   text === null ? null : <div className="errtext">{text}</div>;
 

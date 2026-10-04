@@ -29,6 +29,7 @@ import {
 } from '../ui.js';
 import { useAsync } from '../useAsync.js';
 import { WikiModal } from '../wiki/WikiModal.js';
+import { unplacedIssues } from './issues.js';
 import { StepsCard } from './StepsCard.js';
 import { TriggerCard } from './TriggerCard.js';
 import { inProgressByVersion, VersionsWindow } from './VersionsWindow.js';
@@ -247,6 +248,8 @@ export const EditorPage = ({ tab }: { tab: Tab }) => {
   const keywords =
     definition.trigger.comments?.keywords ?? definition.trigger.messages?.keywords ?? [];
 
+  const unplaced = unplacedIssues(issues);
+
   const refresh = () => {
     detail.reload();
     versions.reload();
@@ -256,7 +259,13 @@ export const EditorPage = ({ tab }: { tab: Tab }) => {
   const failToast = (failure: unknown) => {
     if (failure instanceof ApiError && failure.status === 422) {
       setIssues(failure.issues);
-      setToast({ tone: 'bad', text: 'Fix the highlighted fields and try again.' });
+      setToast({
+        tone: 'bad',
+        text:
+          failure.issues.length === 1
+            ? (failure.issues[0]?.message ?? '')
+            : `Fix the ${failure.issues.length} issues shown below and try again.`,
+      });
     } else if (failure instanceof ApiError) {
       setToast({ tone: 'bad', text: failure.message });
     } else {
@@ -502,6 +511,13 @@ export const EditorPage = ({ tab }: { tab: Tab }) => {
               with the version they started on.
             </Callout>
           ) : null}
+          {unplaced.length === 0 ? null : (
+            <Callout tone="bad" title="Fix these before continuing">
+              {unplaced.map((issue, index) => (
+                <div key={index}>{issue.message}</div>
+              ))}
+            </Callout>
+          )}
           <TriggerCard
             trigger={definition.trigger}
             caps={caps}
