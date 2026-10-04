@@ -1,8 +1,9 @@
 import type { CapabilitiesResponse, ValidationIssue } from '@comment-automations/api-schema';
-import type { Step, Trigger } from '@comment-automations/shared';
+import type { Step, Trigger, WaitForReplyStep } from '@comment-automations/shared';
 import { deliveredAsPrivateReply } from '@comment-automations/shared';
 import { useState } from 'react';
 import { IssueTexts, issuesUnder } from './issues.js';
+import { waitBeforeMessage } from './stepRules.js';
 import { StepPalette } from './StepPalette.js';
 import {
   fieldIssuePaths,
@@ -64,6 +65,8 @@ const StepBody = ({
   path,
   readOnly,
   privateReply,
+  afterWait,
+  stepsAfter,
   onChange,
 }: {
   step: Step;
@@ -72,6 +75,8 @@ const StepBody = ({
   path: string;
   readOnly: boolean;
   privateReply: boolean;
+  afterWait: WaitForReplyStep['expect'] | null;
+  stepsAfter: number;
   onChange: (step: Step) => void;
 }) => {
   const common = { caps, issues, path, readOnly };
@@ -80,10 +85,16 @@ const StepBody = ({
       return <ReplyStep {...common} step={step} onChange={onChange} />;
     case 'send_message':
       return (
-        <MessageStep {...common} step={step} privateReply={privateReply} onChange={onChange} />
+        <MessageStep
+          {...common}
+          step={step}
+          privateReply={privateReply}
+          afterWait={afterWait}
+          onChange={onChange}
+        />
       );
     case 'wait_for_reply':
-      return <WaitStep {...common} step={step} onChange={onChange} />;
+      return <WaitStep {...common} step={step} stepsAfter={stepsAfter} onChange={onChange} />;
     case 'call_webhook':
       return <WebhookStep {...common} step={step} onChange={onChange} />;
   }
@@ -166,6 +177,8 @@ export const StepsCard = ({
                     trigger,
                     steps.slice(0, index),
                   )}
+                  afterWait={waitBeforeMessage(steps.slice(0, index))?.expect ?? null}
+                  stepsAfter={steps.length - index - 1}
                   onChange={(changed) => onChange(steps.map((s, i) => (i === index ? changed : s)))}
                 />
               </div>

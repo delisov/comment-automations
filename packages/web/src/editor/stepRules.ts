@@ -1,4 +1,10 @@
-import type { CapabilityRecord, Step, StepKind, Trigger } from '@comment-automations/shared';
+import type {
+  CapabilityRecord,
+  Step,
+  StepKind,
+  Trigger,
+  WaitForReplyStep,
+} from '@comment-automations/shared';
 import * as shared from '@comment-automations/shared';
 import { allowedStepKinds } from '@comment-automations/shared';
 
@@ -39,3 +45,10 @@ const fromShared = (shared as Partial<{ nextAllowedStepKinds: NextAllowedStepKin
   .nextAllowedStepKinds;
 
 export const nextAllowedStepKinds: NextAllowedStepKinds = fromShared ?? localRules;
+
+export const waitBeforeMessage = (stepsSoFar: Step[]): WaitForReplyStep | null => {
+  const last = stepsSoFar
+    .filter((step) => step.kind === 'send_message' || step.kind === 'wait_for_reply')
+    .at(-1);
+  return last?.kind === 'wait_for_reply' ? last : null;
+};

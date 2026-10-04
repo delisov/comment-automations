@@ -394,3 +394,12 @@ Format:
 - Why: We can do nothing about an event that never entered our system, so there is nothing to test.
 - Affects: packages/stand delivery, packages/stand-web event log, tags and settings, docs/test-stand.md
 - Status: active
+
+## HD-043  The editor shows the success path of a wait as the steps after it
+- When: 2026-10-04T19:20+03:00
+- Who: Dmitriy Elisov
+- Where: Claude Code session
+- Decision: The success response to "Wait for an email address" (or "Wait for any reply") stays the next step in the sequence; no separate message inside the wait. The editor makes that visible: the wait ends with "When the email arrives, the next step runs" (or "the run ends" when nothing follows), and a message after a wait is captioned "Sent when the email arrives" with a placeholder that answers rather than asks.
+- Why: The wait showed only its failure branches, so the success path looked missing. A second place to write the answer would invite two DMs where one is meant, and the data model already expresses success.
+- Affects: packages/web editor (WaitStep, MessageStep, StepsCard, stepRules), docs/design.md
+- Status: active

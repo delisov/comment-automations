@@ -5,6 +5,7 @@ import type {
   SendMessageStep,
   Step,
   StepKind,
+  WaitForReplyStep,
   WebhookMethod,
 } from '@comment-automations/shared';
 import { WEBHOOK_METHODS } from '@comment-automations/shared';
@@ -183,8 +184,12 @@ export const MessageStep = ({
   path,
   readOnly,
   privateReply,
+  afterWait,
   onChange,
-}: StepProps<SendMessageStep> & { privateReply: boolean }) => {
+}: StepProps<SendMessageStep> & {
+  privateReply: boolean;
+  afterWait: WaitForReplyStep['expect'] | null;
+}) => {
   const limits = caps.record.messageLimits;
   const error = issueAt(issues, `${path}.text`);
   const fallbackError = issueAt(issues, `${path}.fallbackText`);
@@ -197,10 +202,21 @@ export const MessageStep = ({
     });
   return (
     <>
+      {afterWait === null ? null : (
+        <div className="meta" style={{ margin: '0 0 8px', color: 'var(--ok)', fontWeight: 600 }}>
+          {afterWait === 'email' ? 'Sent when the email arrives' : 'Sent when they reply'}
+        </div>
+      )}
       <TextBox
         label="Message text"
         value={step.text}
-        placeholder="Hey! Reply with your email and I’ll send you the pricing sheet."
+        placeholder={
+          afterWait === 'email'
+            ? 'Thanks! Here’s the pricing sheet: https://example.com/pricing — {{email}} is filled in with their address'
+            : afterWait === 'any'
+              ? 'Thanks for the reply! Here’s the link: https://example.com/pricing'
+              : 'Hey! Reply with your email and I’ll send you the pricing sheet.'
+        }
         error={error}
         readOnly={readOnly}
         onChange={(text) => onChange({ ...step, text })}

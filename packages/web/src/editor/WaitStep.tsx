@@ -38,14 +38,16 @@ export const WaitStep = ({
   issues,
   path,
   readOnly,
+  stepsAfter,
   onChange,
-}: StepProps<WaitForReplyStep>) => {
+}: StepProps<WaitForReplyStep> & { stepsAfter: number }) => {
   const limits = caps.record.messageLimits;
   const noun = step.expect === 'email' ? 'an email' : 'an answer';
   const reminderError = issueAt(issues, `${path}.reminder.text`);
   const reminderDelayError = issueAt(issues, `${path}.reminder.afterHours`);
   const nudgeError = issueAt(issues, `${path}.nudge.text`);
   const giveUpError = issueAt(issues, `${path}.giveUpHours`);
+  const success = step.expect === 'email' ? 'When the email arrives' : 'When they reply';
   return (
     <>
       <div className="field" style={{ margin: '0 0 14px' }}>
@@ -187,6 +189,13 @@ export const WaitStep = ({
             <Counter text={step.nudge.text} limits={limits} />
           </div>
         )}
+      </div>
+      <div className="field" style={{ margin: '14px 0 0' }}>
+        <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--ok)' }}>
+          {stepsAfter === 0
+            ? `${success}, the run ends. Add a step below to answer them.`
+            : `${success}, the ${stepsAfter === 1 ? 'next step runs' : 'next steps run'}.`}
+        </div>
       </div>
     </>
   );

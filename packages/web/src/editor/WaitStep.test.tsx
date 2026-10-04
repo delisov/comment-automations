@@ -14,14 +14,19 @@ const step: WaitForReplyStep = {
   nudge: { text: 'Just the email is enough', then: 'wait' },
 };
 
-const renderWait = (platform: 'instagram' | 'bluesky') =>
+const renderWait = (
+  platform: 'instagram' | 'bluesky',
+  waitFor: WaitForReplyStep['expect'] = 'email',
+  stepsAfter = 1,
+) =>
   render(
     <WaitStep
-      step={step}
+      step={{ ...step, expect: waitFor }}
       caps={deriveCapabilities(capabilities[platform])}
       issues={[]}
       path="steps.2"
       readOnly={false}
+      stepsAfter={stepsAfter}
       onChange={vi.fn()}
     />,
   );
@@ -54,4 +59,19 @@ describe('wait step', () => {
       'Just the email is enough',
     );
   });
+
+  it.each([
+    ['email', 1, 'When the email arrives, the next step runs.'],
+    ['email', 2, 'When the email arrives, the next steps run.'],
+    ['any', 1, 'When they reply, the next step runs.'],
+    ['any', 3, 'When they reply, the next steps run.'],
+    ['email', 0, 'When the email arrives, the run ends. Add a step below to answer them.'],
+    ['any', 0, 'When they reply, the run ends. Add a step below to answer them.'],
+  ] as const)(
+    'ends the card with what happens on success (expect %s, %i steps after)',
+    (waitFor, stepsAfter, line) => {
+      const { container } = renderWait('instagram', waitFor, stepsAfter);
+      expect(container.lastElementChild?.textContent).toEqual(line);
+    },
+  );
 });
