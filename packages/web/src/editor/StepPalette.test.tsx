@@ -62,4 +62,47 @@ describe('step palette', () => {
     openPalette('instagram', []);
     expect(screen.getByText('Private reply to the comment with text')).not.toBeNull();
   });
+
+  describe('placement', () => {
+    const placeMenu = (buttonTop: number, menuHeight: number) => {
+      vi.stubGlobal('innerHeight', 800);
+      const scrollIntoView = vi.fn();
+      Element.prototype.scrollIntoView = scrollIntoView;
+      vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (
+        this: HTMLElement,
+      ) {
+        const isMenu = this.getAttribute('role') === 'menu';
+        const top = isMenu ? 0 : buttonTop;
+        const height = isMenu ? menuHeight : 44;
+        return new DOMRect(0, top, 300, height);
+      });
+      openPalette('bluesky', [firstMessage]);
+      return { menu: screen.getByRole('menu'), scrollIntoView };
+    };
+
+    afterEach(() => {
+      vi.restoreAllMocks();
+      vi.unstubAllGlobals();
+    });
+
+    it('opens upward from the button top when the viewport has no room below', () => {
+      const { menu, scrollIntoView } = placeMenu(700, 220);
+      expect(menu.style.top).toBe('auto');
+      expect(menu.style.bottom).toBe('calc(100% + 6px)');
+      expect(scrollIntoView).not.toHaveBeenCalled();
+    });
+
+    it('opens downward and scrolls the menu into view when there is room below', () => {
+      const { menu, scrollIntoView } = placeMenu(100, 220);
+      expect(menu.style.top).toBe('');
+      expect(menu.style.bottom).toBe('');
+      expect(scrollIntoView).toHaveBeenCalledWith({ block: 'nearest', behavior: 'smooth' });
+    });
+
+    it('opens downward when neither side fits the menu but below is larger', () => {
+      const { menu, scrollIntoView } = placeMenu(300, 700);
+      expect(menu.style.top).toBe('');
+      expect(scrollIntoView).toHaveBeenCalledWith({ block: 'nearest', behavior: 'smooth' });
+    });
+  });
 });
