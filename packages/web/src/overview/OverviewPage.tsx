@@ -4,6 +4,7 @@ import { useCallback, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router';
 import type { Account } from '../api/client.js';
 import { api } from '../api/client.js';
+import { capabilitiesFor, supportsAutomations, unsupportedReason } from '../capabilities.js';
 import { formatRelative, plural } from '../format.js';
 import type { ToastMessage } from '../ui.js';
 import {
@@ -109,6 +110,17 @@ const Table = ({
   </div>
 );
 
+const inviteText = (account: Account): string => {
+  const platform = platformLabel(account.platform);
+  const { comments, messages } = capabilitiesFor(account).allowedTriggers;
+  const doing = !messages
+    ? `Reply to comments on ${platform}`
+    : comments
+      ? `Reply to comments and send DMs on ${platform}`
+      : `Answer messages on ${platform}`;
+  return `${doing} automatically. Set up the first one in a minute.`;
+};
+
 export const OverviewPage = () => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -123,6 +135,7 @@ export const OverviewPage = () => {
   const [accountFilter, setAccountFilter] = useState<AccountId | ''>('');
   const [search, setSearch] = useState('');
   const [creating, setCreating] = useState(false);
+  const [creatingFor, setCreatingFor] = useState<AccountId | undefined>(undefined);
 
   const accountList = accounts.data ?? [];
   const all = (automations.data ?? []).filter((automation) => automation.state !== 'archived');
@@ -146,7 +159,12 @@ export const OverviewPage = () => {
           filteredAccount === undefined ? '' : ` on ${filteredAccount.handle}`
         } · ${plural(runs, 'run')} in the last 24 hours · ${failed} failed`;
 
-  const newButton = <Button onClick={() => setCreating(true)}>+ New automation</Button>;
+  const openModal = (accountId?: AccountId) => {
+    setCreatingFor(accountId);
+    setCreating(true);
+  };
+
+  const newButton = <Button onClick={() => openModal()}>+ New automation</Button>;
 
   return (
     <>
@@ -211,6 +229,23 @@ export const OverviewPage = () => {
       ) : null}
       {automations.status === 'loading' && automations.data === undefined ? (
         <Skeleton rows={4} />
+      ) : filteredAccount !== undefined && byAccount.length === 0 ? (
+        supportsAutomations(capabilitiesFor(filteredAccount)) ? (
+          <Empty
+            title={`No automations for ${filteredAccount.handle} on ${platformLabel(filteredAccount.platform)} yet`}
+            text={inviteText(filteredAccount)}
+            action={
+              <Button onClick={() => openModal(filteredAccount.id)}>
+                Create one for {filteredAccount.handle}
+              </Button>
+            }
+          />
+        ) : (
+          <Empty
+            title={`No automations for ${filteredAccount.handle} on ${platformLabel(filteredAccount.platform)}`}
+            text={unsupportedReason(filteredAccount)}
+          />
+        )
       ) : all.length === 0 ? (
         <Empty
           title="No automations yet"
@@ -238,6 +273,7 @@ export const OverviewPage = () => {
       {creating ? (
         <NewAutomationModal
           accounts={accountList}
+          initialAccountId={creatingFor}
           onClose={() => setCreating(false)}
           onCreated={(automation) => navigate(`/automations/${automation.id}`)}
         />
