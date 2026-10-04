@@ -1,7 +1,7 @@
 import type { RunId, SendMessageStep, Step, WaitForReplyStep } from '@comment-automations/shared';
 import { canRemindBeforeReply } from '@comment-automations/shared';
 import type { Db, RunContext, RunError } from '../db/types.js';
-import { pendingReply, resumeWaitingRun } from '../runs/resume.js';
+import { pendingReplies, repliesToProcess, resumeWaitingRun } from '../runs/resume.js';
 import type { LoadedRun } from '../runs/store.js';
 import {
   enqueueJob,
@@ -168,10 +168,10 @@ const waitForReply = async (
         reminderAt: reminderAt?.toISOString() ?? null,
       },
     });
-    const reply = await pendingReply(trx, loaded);
-    const waiting = reply === undefined ? undefined : await loadRun(trx, runId);
-    if (reply !== undefined && waiting !== undefined) {
-      await resumeWaitingRun(deps, trx, waiting, reply);
+    const replies = repliesToProcess(await pendingReplies(trx, loaded), step.expect);
+    const waiting = replies.length === 0 ? undefined : await loadRun(trx, runId);
+    if (waiting !== undefined) {
+      await resumeWaitingRun(deps, trx, waiting, replies);
     }
   });
   return { kind: 'wait' };
