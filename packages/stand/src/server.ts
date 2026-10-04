@@ -11,7 +11,7 @@ await migrate(db);
 
 const app = buildApp({
   db,
-  clock: controlledClock(new Date()),
+  clock: controlledClock(),
   sha: process.env.GIT_SHA ?? 'dev',
   serviceUrl: requireEnv('SERVICE_URL'),
   serviceToken: requireEnv('SERVICE_TOKEN'),

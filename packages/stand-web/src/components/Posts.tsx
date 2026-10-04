@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { Account, Comment, Delivery, LogEntry, Rules, State, User } from '../api.js';
+import { annotate } from './annotate.js';
 
 type Props = {
   state: State;
@@ -9,60 +10,6 @@ type Props = {
   log: LogEntry[];
   deliveries: Delivery[];
   onComment: (body: { postId: string; userId: string; text: string; parentId?: string }) => void;
-};
-
-type Tag = { text: string; tone: 'ok' | 'warn' | 'danger' | 'muted' };
-
-const payloadString = (payload: Record<string, unknown>, key: string): string | undefined => {
-  const value = payload[key];
-  return typeof value === 'string' ? value : undefined;
-};
-
-const requestOf = (payload: Record<string, unknown>): Record<string, unknown> =>
-  typeof payload.request === 'object' && payload.request !== null
-    ? (payload.request as Record<string, unknown>)
-    : {};
-
-const annotate = (comment: Comment, log: LogEntry[], deliveries: Delivery[]): Tag[] => {
-  const tags: Tag[] = [];
-  for (const entry of log) {
-    if (
-      entry.direction === 'to_service' &&
-      payloadString(entry.payload, 'commentId') === comment.id
-    ) {
-      if (entry.result_code === 'DROPPED') {
-        tags.push({ text: 'dropped', tone: 'warn' });
-        continue;
-      }
-      if (entry.result_code === 'DUPLICATED') {
-        tags.push({ text: 'duplicate', tone: 'warn' });
-      }
-      const eventId = payloadString(entry.payload, 'eventId');
-      const attempts = deliveries.filter((delivery) => delivery.event_id === eventId);
-      if (attempts.some((delivery) => delivery.status === 'delivered')) {
-        tags.push({ text: 'delivered', tone: 'ok' });
-      } else if (attempts.length > 0) {
-        tags.push({ text: `delivery failed (${attempts.length} attempts)`, tone: 'danger' });
-      } else {
-        tags.push({ text: 'delivering…', tone: 'muted' });
-      }
-    }
-    if (entry.direction === 'from_service' && entry.kind === 'reply') {
-      const request = requestOf(entry.payload);
-      if (request.commentId !== comment.id) {
-        continue;
-      }
-      if (entry.result_code === 'OK') {
-        tags.push({
-          text: request.visibility === 'private' ? 'private reply used' : 'public reply',
-          tone: 'ok',
-        });
-      } else {
-        tags.push({ text: `refused ${entry.result_code}`, tone: 'danger' });
-      }
-    }
-  }
-  return tags;
 };
 
 export const Posts = ({ state, account, user, rules, log, deliveries, onComment }: Props) => {
@@ -107,7 +54,6 @@ export const Posts = ({ state, account, user, rules, log, deliveries, onComment 
       </div>
       <div>{comment.text}</div>
       <div className="tags">
-        {comment.private_reply_sent && <span className="tag ok">private reply used</span>}
         {annotate(comment, log, deliveries).map((tag, index) => (
           <span key={index} className={`tag ${tag.tone}`}>
             {tag.text}
