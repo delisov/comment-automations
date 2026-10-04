@@ -1,0 +1,421 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Comment Automations · Dmitriy Elisov</title>
+    <meta
+      name="description"
+      content="Blotato take-home: comment-triggered DM automations that respect every network's rules. Design, working product, test stand and the record of how it was built."
+    />
+    <style>
+      :root {
+        --bg: #f8f7fc;
+        --card: #ffffff;
+        --text: #1f1b2e;
+        --muted: #5d5873;
+        --line: #e7e4f0;
+        --violet: #7c3aed;
+        --violet-soft: #f1eafe;
+        --violet-text: #6d28d9;
+        --code: #f4f2f9;
+        --radius: 12px;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #14121c;
+          --card: #1c1a27;
+          --text: #ecebf3;
+          --muted: #a6a1bd;
+          --line: #2d2a3c;
+          --violet: #8b5cf6;
+          --violet-soft: #2a2140;
+          --violet-text: #c4b5fd;
+          --code: #24212f;
+        }
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+        font:
+          16px/1.6 system-ui,
+          -apple-system,
+          'Segoe UI',
+          Roboto,
+          sans-serif;
+      }
+      a {
+        color: var(--violet-text);
+      }
+      .wrap {
+        max-width: 880px;
+        margin: 0 auto;
+        padding: 48px 16px 72px;
+      }
+      .eyebrow {
+        color: var(--violet-text);
+        font-weight: 600;
+        font-size: 14px;
+        letter-spacing: 0.02em;
+      }
+      h1 {
+        font-size: clamp(30px, 5vw, 42px);
+        line-height: 1.15;
+        margin: 8px 0 14px;
+        letter-spacing: -0.02em;
+      }
+      h2 {
+        font-size: 22px;
+        margin: 0 0 12px;
+      }
+      .lede {
+        font-size: 18px;
+        color: var(--muted);
+        margin: 0 0 24px;
+        max-width: 680px;
+      }
+      .actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+      }
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 11px 18px;
+        border-radius: 10px;
+        font-weight: 600;
+        text-decoration: none;
+        border: 1px solid var(--line);
+        background: var(--card);
+        color: var(--text);
+      }
+      .btn.primary {
+        background: var(--violet);
+        border-color: var(--violet);
+        color: #fff;
+      }
+      .btn:hover {
+        filter: brightness(1.05);
+      }
+      section {
+        margin-top: 40px;
+      }
+      .card {
+        background: var(--card);
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        padding: 22px;
+      }
+      .video {
+        aspect-ratio: 16 / 9;
+        display: grid;
+        place-items: center;
+        text-align: center;
+        background: var(--violet-soft);
+        border: 1px dashed var(--violet);
+        border-radius: var(--radius);
+        color: var(--violet-text);
+        padding: 16px;
+      }
+      .video strong {
+        display: block;
+        font-size: 18px;
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+        gap: 14px;
+      }
+      .grid .card h3 {
+        margin: 0 0 6px;
+        font-size: 16px;
+      }
+      .grid .card p {
+        margin: 0;
+        color: var(--muted);
+        font-size: 15px;
+      }
+      ol,
+      ul {
+        padding-left: 22px;
+        margin: 0;
+      }
+      li {
+        margin: 6px 0;
+      }
+      .files {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 15px;
+      }
+      .files td {
+        padding: 10px 8px;
+        border-top: 1px solid var(--line);
+        vertical-align: top;
+      }
+      .files tr:first-child td {
+        border-top: 0;
+      }
+      .files td:first-child {
+        width: 42%;
+      }
+      code {
+        background: var(--code);
+        padding: 2px 6px;
+        border-radius: 6px;
+        font-size: 14px;
+        word-break: break-word;
+      }
+      .note {
+        color: var(--muted);
+        font-size: 14px;
+        margin-top: 12px;
+      }
+      footer {
+        margin-top: 56px;
+        color: var(--muted);
+        font-size: 14px;
+      }
+      @media (max-width: 560px) {
+        .files td {
+          display: block;
+          width: 100% !important;
+          padding: 4px 0;
+          border-top: 0;
+        }
+        .files tr {
+          display: block;
+          padding: 10px 0;
+          border-top: 1px solid var(--line);
+        }
+        .files tr:first-child {
+          border-top: 0;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="wrap">
+      <div class="eyebrow">Blotato take-home · Dmitriy Elisov</div>
+      <h1>Comment-triggered DM automations that respect every network's rules</h1>
+      <p class="lede">
+        Someone comments "pricing", gets a reply, gets a DM asking for their email, and gets the
+        link once they answer. The plumbing is easy. The hard part is that Instagram, X, Bluesky,
+        YouTube, WhatsApp and the rest each allow a different slice of that flow, under different
+        time windows. This project is built around that.
+      </p>
+      <div class="actions">
+        <a class="btn primary" href="https://app.blotato.elisov.com/">Open the product</a>
+        <a class="btn" href="https://stand.blotato.elisov.com/">Open the test stand</a>
+        <a class="btn" href="https://github.com/delisov/comment-automations">Code on GitHub</a>
+      </div>
+
+      <section>
+        <div class="video" id="video">
+          <div><strong>Walkthrough video</strong>A five-minute tour is coming here soon.</div>
+        </div>
+      </section>
+
+      <section>
+        <h2>What I built</h2>
+        <div class="grid">
+          <div class="card">
+            <h3>A capability record per network</h3>
+            <p>
+              A small description of what each platform permits: private replies, messaging windows,
+              who may message whom, limits. The editor, the validator and the engine are all driven
+              by it, so a flow you can build is a flow that can run.
+            </p>
+          </div>
+          <div class="card">
+            <h3>The engine</h3>
+            <p>
+              Postgres-only queue and timers, deduplication on the platform's event id, one active
+              run per person with supersede, idempotent sends, and deadlines checked before every
+              call.
+            </p>
+          </div>
+          <div class="card">
+            <h3>The product UI</h3>
+            <p>
+              A ManyChat-simple constructor in Blotato's style, with immutable versions, runs and
+              analytics compared across versions, including reply rate.
+            </p>
+          </div>
+          <div class="card">
+            <h3>A test stand</h3>
+            <p>
+              A second service that emulates ten networks and enforces their public rules
+              independently of the engine. You act as a user there and watch every call cross the
+              boundary.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <h2>Try it in two minutes</h2>
+        <div class="card">
+          <ol>
+            <li>
+              In the <a href="https://app.blotato.elisov.com/">product</a>, click
+              <b>New automation</b>, pick <b>@oqtastore</b> on Instagram and give it a name.
+            </li>
+            <li>
+              Add the keyword <code>pricing</code>, then the steps: reply to the comment, send a
+              message asking for the email, wait for a reply, send the link. Publish.
+            </li>
+            <li>
+              In the <a href="https://stand.blotato.elisov.com/">test stand</a>, open the Instagram
+              tab, act as <b>@jane.doe</b> and comment <code>pricing please</code> under a post.
+            </li>
+            <li>
+              Watch the public reply and the private DM arrive. Answer the DM with an email address
+              and the link follows.
+            </li>
+            <li>
+              Back in the product, open <b>Runs</b> to see the timeline of that run, step by step.
+            </li>
+          </ol>
+          <p class="note">
+            This is a shared demo with no login, so others may be trying it at the same time. The
+            stand's <b>Reset</b> restores the starting accounts, posts and users and keeps the
+            automations. The clock buttons in the stand move time forward, which is how you see
+            reminders, give-ups and closed messaging windows without waiting a day.
+          </p>
+        </div>
+      </section>
+
+      <section>
+        <h2>Where to look</h2>
+        <div class="card">
+          <table class="files">
+            <tr>
+              <td>
+                <a href="https://github.com/delisov/comment-automations/blob/main/docs/design.md"
+                  ><code>docs/design.md</code></a
+                >
+              </td>
+              <td>
+                Start here. The design answer: boundaries, data model, execution model, reliability
+                and concurrency in one table.
+              </td>
+            </tr>
+            <tr>
+              <td>
+                <a
+                  href="https://github.com/delisov/comment-automations/blob/main/docs/how-this-was-built.md"
+                  ><code>docs/how-this-was-built.md</code></a
+                >
+              </td>
+              <td>What I decided, what AI wrote, and where the reviews caught it being wrong.</td>
+            </tr>
+            <tr>
+              <td>
+                <a
+                  href="https://github.com/delisov/comment-automations/blob/main/docs/human-decisions.md"
+                  ><code>docs/human-decisions.md</code></a
+                >
+                and
+                <a
+                  href="https://github.com/delisov/comment-automations/blob/main/docs/ai-decisions.md"
+                  ><code>ai-decisions.md</code></a
+                >
+              </td>
+              <td>
+                Every decision with its author, time and reason: 42 mine, 24 made by the AI and open
+                to overrule.
+              </td>
+            </tr>
+            <tr>
+              <td>
+                <a href="https://github.com/delisov/comment-automations/blob/main/docs/platforms.md"
+                  ><code>docs/platforms.md</code></a
+                >
+              </td>
+              <td>The research on each network's rules, with sources.</td>
+            </tr>
+            <tr>
+              <td>
+                <a
+                  href="https://github.com/delisov/comment-automations/tree/main/packages/shared/src/platforms"
+                  ><code>packages/shared/src/platforms/</code></a
+                >
+                and
+                <a
+                  href="https://github.com/delisov/comment-automations/blob/main/packages/shared/src/capabilities.ts"
+                  ><code>capabilities.ts</code></a
+                >
+              </td>
+              <td>The capability records and the helpers that decide which step may come next.</td>
+            </tr>
+            <tr>
+              <td>
+                <a href="https://github.com/delisov/comment-automations/tree/main/packages/api/src"
+                  ><code>packages/api/src/</code></a
+                >
+                (<code>ingest</code>, <code>runs</code>, <code>executor</code>)
+              </td>
+              <td>
+                The engine: intake and deduplication, run lifecycle, step execution and timers.
+              </td>
+            </tr>
+            <tr>
+              <td>
+                <a
+                  href="https://github.com/delisov/comment-automations/blob/main/packages/stand/src/worlds/rules.ts"
+                  ><code>packages/stand/src/worlds/rules.ts</code></a
+                >
+              </td>
+              <td>The stand's own, independent encoding of the platform rules.</td>
+            </tr>
+            <tr>
+              <td>
+                <a
+                  href="https://github.com/delisov/comment-automations/blob/main/packages/test-cycles/src/scenarios.ts"
+                  ><code>packages/test-cycles/src/scenarios.ts</code></a
+                >
+              </td>
+              <td>The 20 end-to-end cycles that run against the whole stack in CI.</td>
+            </tr>
+          </table>
+        </div>
+      </section>
+
+      <section>
+        <h2>How it was made</h2>
+        <div class="card">
+          <ul>
+            <li>
+              I made the product and architecture decisions and reviewed the work; AI wrote the code
+              under a gated process: isolated branches, independent reviews, verification on a real
+              database, and a green CI before anything merged.
+            </li>
+            <li>
+              Three rounds of adversarial testing ran against the live system. Every finding came
+              with a reproduction and was fixed, and each became a regression cycle.
+            </li>
+            <li>
+              No real platform credentials were used. The networks' rules come from their public
+              documentation, encoded twice so a wrong assumption shows up as a failure instead of a
+              passing test.
+            </li>
+          </ul>
+        </div>
+      </section>
+
+      <footer>
+        Dmitriy Elisov ·
+        <a href="https://github.com/delisov/comment-automations"
+          >github.com/delisov/comment-automations</a
+        >
+      </footer>
+    </main>
+  </body>
+</html>
