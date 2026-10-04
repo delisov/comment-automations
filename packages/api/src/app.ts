@@ -49,7 +49,7 @@ export const buildApp = (deps: AppDeps): App => {
     ) {
       return reply.status(422).send({ issues: error.issues });
     }
-    if ((error as { code?: string }).code === '22P02') {
+    if (['22P02', '22021'].includes((error as { code?: string }).code ?? '')) {
       return reply.status(404).send({ error: 'Not found' });
     }
     if (((error as { statusCode?: number }).statusCode ?? 500) >= 500) {
