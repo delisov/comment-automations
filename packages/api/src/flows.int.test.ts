@@ -8,7 +8,7 @@ import { httpGateway } from './gateway/http.js';
 import { ingestEvents } from './ingest/process.js';
 import { liveAutomations, startRun } from './runs/start.js';
 import type { Harness } from './testing/harness.js';
-import { START, comment, createHarness, message, withDatabase } from './testing/harness.js';
+import { START, TOKEN, comment, createHarness, message, withDatabase } from './testing/harness.js';
 import { LOCK_MS, claimJob } from './worker/worker.js';
 
 const HOUR = 60 * 60 * 1000;
@@ -74,6 +74,17 @@ const webhookOnly: Definition = {
   ],
 };
 
+const twoWaits: Definition = {
+  trigger: instagramFlow.trigger,
+  steps: [
+    { kind: 'send_message', text: 'Want the guide?', buttons: [] },
+    { kind: 'wait_for_reply', expect: 'any', giveUpHours: 72 },
+    { kind: 'send_message', text: 'What is your email?', buttons: [] },
+    { kind: 'wait_for_reply', expect: 'email', giveUpHours: 72 },
+    { kind: 'send_message', text: 'Sent to {{email}}', buttons: [] },
+  ],
+};
+
 const blueskyReminder: Definition = {
   trigger: {
     comments: { posts: { kind: 'any' }, keywords: ['pricing'] },
@@ -134,6 +145,13 @@ withDatabase('the engine on a real database', () => {
       captured: { email: 'jane@example.com' },
       replied: true,
     });
+    const stored = await h.db.selectFrom('runs').select('context').executeTakeFirstOrThrow();
+    const replyEvent = await h.db
+      .selectFrom('events')
+      .select('id')
+      .where('external_event_id', '=', 'evt_message_1')
+      .executeTakeFirstOrThrow();
+    expect(stored.context.consumedEventIds).toEqual([replyEvent.id]);
     expect(run.timeline.map((entry) => [entry.stepIndex, entry.level, entry.message])).toEqual([
       [null, 'info', 'Started from a comment'],
       [0, 'info', 'Replied to the comment'],
@@ -180,7 +198,11 @@ withDatabase('the engine on a real database', () => {
       {
         url: 'https://crm.example.com/hooks/leads',
         method: 'POST',
-        headers: { 'content-type': 'application/json', Authorization: 'Bearer token' },
+        headers: {
+          'content-type': 'application/json',
+          Authorization: 'Bearer token',
+          'X-Idempotency-Key': `${run.id}:4:webhook`,
+        },
         body: {
           automation: { id: automationId, name: 'Pricing guide' },
           version: { id: expect.any(String), number: 1 },
@@ -207,6 +229,12 @@ withDatabase('the engine on a real database', () => {
       { idempotency_key: `${run.id}:3:message`, kind: 'message', status: 'ok' },
       { idempotency_key: `${run.id}:4:webhook`, kind: 'webhook', status: 'ok' },
     ]);
+    const webhookRequest = await h.db
+      .selectFrom('outbound_calls')
+      .select(sql<string>`request->'headers'->>'X-Idempotency-Key'`.as('key'))
+      .where('kind', '=', 'webhook')
+      .executeTakeFirstOrThrow();
+    expect(webhookRequest).toEqual({ key: `${run.id}:4:webhook` });
     const contact = await h.db.selectFrom('contacts').select('email').executeTakeFirstOrThrow();
     expect(contact).toEqual({ email: 'jane@example.com' });
   });
@@ -1291,5 +1319,210 @@ withDatabase('the engine on a real database', () => {
       ['waiting', 'Waiting for a reply · gives up at 2026-10-10T10:01:00.000Z'],
     ]);
     expect(h.gateway.calls).toHaveLength(2);
+  });
+
+  it('picks up a reply delivered before the comment that starts the run', async () => {
+    const account = await h.seedAccount('instagram', 'ig_acc');
+    const { automationId } = await h.createLive(account, instagramFlow);
+    const repliedAt = new Date(START.getTime() + 60_000).toISOString();
+
+    expect(await h.ingest([message({ createdAt: repliedAt })])).toEqual({
+      accepted: 1,
+      duplicates: 0,
+    });
+    h.clock.advance(2 * 60_000);
+    expect(await h.ingest([comment()])).toEqual({ accepted: 1, duplicates: 0 });
+    await h.drain();
+
+    const [run] = await h.runsOf(automationId);
+    expect([run?.status, run?.context.captured, run?.context.lastInboundAt]).toEqual([
+      'completed',
+      { email: 'jane@example.com' },
+      repliedAt,
+    ]);
+    expect(run?.timeline.map((entry) => entry.message)).toEqual([
+      'Started from a comment',
+      'Replied to the comment',
+      'Sent the message asking for a reply',
+      'Waiting for a reply · gives up at 2026-10-07T10:02:00.000Z',
+      'Reply received with an email',
+      'Sent the message',
+      'Webhook delivered (200)',
+      'Completed',
+    ]);
+  });
+
+  it('takes a second reply stamped the same second as the first', async () => {
+    const account = await h.seedAccount('instagram', 'ig_acc');
+    const { automationId } = await h.createLive(account, twoWaits);
+    await h.ingest([comment()]);
+    await h.drain();
+    h.clock.advance(HOUR);
+    const repliedAt = h.clock.now().toISOString();
+
+    expect(
+      await h.ingest([
+        message({
+          eventId: 'evt_yes',
+          messageId: 'm_yes',
+          text: 'yes please',
+          createdAt: repliedAt,
+        }),
+        message({
+          eventId: 'evt_email',
+          messageId: 'm_email',
+          text: 'me@example.com',
+          createdAt: repliedAt,
+        }),
+      ]),
+    ).toEqual({ accepted: 2, duplicates: 0 });
+    await h.drain();
+
+    const [run] = await h.runsOf(automationId);
+    expect([run?.status, run?.context.captured]).toEqual([
+      'completed',
+      { email: 'me@example.com' },
+    ]);
+    expect(run?.timeline.map((entry) => entry.message)).toEqual([
+      'Started from a comment',
+      'Sent the message asking for a reply',
+      'Waiting for a reply · gives up at 2026-10-07T10:00:00.000Z',
+      'Reply received',
+      'Sent the message asking for a reply',
+      'Waiting for a reply · gives up at 2026-10-07T11:00:00.000Z',
+      'Reply received with an email',
+      'Sent the message',
+      'Completed',
+    ]);
+  });
+
+  it('takes the earliest early reply carrying an email, not the latest message', async () => {
+    const account = await h.seedAccount('instagram', 'ig_acc');
+    const { automationId } = await h.createLive(account, instagramFlow);
+    const at = (seconds: number) => new Date(START.getTime() + seconds * 1000).toISOString();
+
+    await h.ingest([
+      message({ eventId: 'evt_hi', messageId: 'm_hi', text: 'hi there', createdAt: at(1) }),
+      message({
+        eventId: 'evt_email',
+        messageId: 'm_email',
+        text: 'me@example.com',
+        createdAt: at(2),
+      }),
+      message({ eventId: 'evt_bye', messageId: 'm_bye', text: 'thanks bye', createdAt: at(3) }),
+    ]);
+    h.clock.advance(2 * 60_000);
+    await h.ingest([comment()]);
+    await h.drain();
+
+    const [run] = await h.runsOf(automationId);
+    expect([run?.status, run?.context.captured, run?.context.lastInboundAt]).toEqual([
+      'completed',
+      { email: 'me@example.com' },
+      at(2),
+    ]);
+    expect(h.gateway.calls.map((call) => call.operation)).toEqual([
+      'replyToComment',
+      'replyToComment',
+      'sendMessage',
+    ]);
+  });
+
+  it('counts a message redelivered under a new event id as a duplicate that resumes nothing', async () => {
+    const account = await h.seedAccount('instagram', 'ig_acc');
+    const { automationId } = await h.createLive(account, messageThenWait('wait'));
+    await h.ingest([comment()]);
+    await h.drain();
+    h.clock.advance(HOUR);
+    const repliedAt = h.clock.now().toISOString();
+    await h.ingest([message({ text: 'why?', createdAt: repliedAt })]);
+    await h.drain();
+    const [nudged] = await h.runsOf(automationId);
+    expect([nudged?.status, nudged?.timeline.at(-1)?.message]).toEqual([
+      'waiting',
+      'Asked once more',
+    ]);
+
+    expect(
+      await h.ingest([message({ eventId: 'evt_redelivered', text: 'why?', createdAt: repliedAt })]),
+    ).toEqual({ accepted: 0, duplicates: 1 });
+    await h.drain();
+
+    const [run] = await h.runsOf(automationId);
+    expect(run?.timeline.map((entry) => entry.message).slice(-2)).toEqual([
+      'Asked once more',
+      'Ignored a redelivered message: this run already handled it',
+    ]);
+    expect(h.gateway.calls).toHaveLength(2);
+    expect(
+      await h.db
+        .selectFrom('events')
+        .select('external_event_id')
+        .where('kind', '=', 'message')
+        .execute(),
+    ).toEqual([{ external_event_id: 'evt_message_1' }]);
+  });
+
+  it('stores a batch whose middle event carries a lone surrogate', async () => {
+    const account = await h.seedAccount('instagram', 'ig_acc');
+    const { automationId } = await h.createLive(account, instagramFlow);
+
+    expect(
+      await h.ingest([
+        comment({ eventId: 'evt_1', commentId: 'c_1', authorId: 'u_a', authorHandle: 'a' }),
+        comment({
+          eventId: 'evt_2',
+          commentId: 'c_2',
+          authorId: 'u_b',
+          authorHandle: 'b\ud800',
+          text: 'pricing \ud800?',
+        }),
+        comment({ eventId: 'evt_3', commentId: 'c_3', authorId: 'u_c', authorHandle: 'c' }),
+      ]),
+    ).toEqual({ accepted: 3, duplicates: 0 });
+    await h.drain();
+
+    const stored = await h.db
+      .selectFrom('events')
+      .select(sql<string>`payload->>'text'`.as('text'))
+      .where('external_event_id', '=', 'evt_2')
+      .executeTakeFirstOrThrow();
+    expect(stored).toEqual({ text: 'pricing �?' });
+    const contacts = await h.db.selectFrom('contacts').select('handle').orderBy('handle').execute();
+    expect(contacts).toEqual([{ handle: 'a' }, { handle: 'b�' }, { handle: 'c' }]);
+    expect((await h.runsOf(automationId)).map((run) => run.status)).toEqual([
+      'waiting',
+      'waiting',
+      'waiting',
+    ]);
+  });
+
+  it('refuses an ingest body over 256 KB and keeps the first 10,000 characters of a comment', async () => {
+    const account = await h.seedAccount('instagram', 'ig_acc');
+    const { automationId } = await h.createLive(account, instagramFlow);
+
+    const tooLarge = await h.app.inject({
+      method: 'POST',
+      url: '/ingest/events',
+      headers: { 'x-service-token': TOKEN },
+      payload: { events: [comment({ text: 'x'.repeat(900 * 1024) })] },
+    });
+    expect([tooLarge.statusCode, tooLarge.json<{ code: string }>().code]).toEqual([
+      413,
+      'FST_ERR_CTP_BODY_TOO_LARGE',
+    ]);
+
+    expect(await h.ingest([comment({ text: `pricing ${'x'.repeat(20_000)}` })])).toEqual({
+      accepted: 1,
+      duplicates: 0,
+    });
+    await h.drain();
+
+    const stored = await h.db
+      .selectFrom('events')
+      .select(sql<number>`length(payload->>'text')`.as('length'))
+      .executeTakeFirstOrThrow();
+    expect(stored).toEqual({ length: 10_000 });
+    expect((await h.runsOf(automationId)).map((run) => run.status)).toEqual(['waiting']);
   });
 });

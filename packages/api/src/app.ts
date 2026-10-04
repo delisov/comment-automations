@@ -5,14 +5,23 @@ import { registerAccountRoutes } from './routes/accounts.js';
 import { registerAutomationRoutes } from './routes/automations.js';
 import { registerIngestRoutes } from './routes/ingest.js';
 import { registerRunRoutes } from './routes/runs.js';
+import {
+  answersIssues,
+  isSchemaIssuesError,
+  schemaErrorFormatter,
+} from './routes/schema-errors.js';
 import { registerStatic } from './routes/static.js';
 import { registerTestRoutes } from './routes/test.js';
 import type { App, AppDeps } from './routes/types.js';
+import { sanitizeStrings } from './sanitize.js';
 
 export type { AppDeps } from './routes/types.js';
 
 export const buildApp = (deps: AppDeps): App => {
-  const app = Fastify().withTypeProvider<TypeBoxTypeProvider>();
+  const app = Fastify({
+    ajv: { customOptions: { verbose: true } },
+    schemaErrorFormatter,
+  }).withTypeProvider<TypeBoxTypeProvider>();
 
   const parseJson = app.getDefaultJsonParser('error', 'error');
   app.addContentTypeParser('application/json', { parseAs: 'string' }, (request, body, done) => {
@@ -23,12 +32,23 @@ export const buildApp = (deps: AppDeps): App => {
     parseJson(request, String(body), done);
   });
 
+  app.addHook('preValidation', async (request) => {
+    request.body = sanitizeStrings(request.body);
+  });
+
   app.get('/health', { schema: { response: { 200: HealthResponse } } }, async () => ({
     status: 'ok' as const,
     sha: deps.sha,
   }));
 
-  app.setErrorHandler((error, _request, reply) => {
+  app.setErrorHandler((error, request, reply) => {
+    if (
+      isSchemaIssuesError(error) &&
+      error.validationContext === 'body' &&
+      answersIssues(request)
+    ) {
+      return reply.status(422).send({ issues: error.issues });
+    }
     if ((error as { code?: string }).code === '22P02') {
       return reply.status(404).send({ error: 'Not found' });
     }

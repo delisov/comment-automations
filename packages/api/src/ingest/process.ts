@@ -1,29 +1,73 @@
-import type { IngestResponse, InboundEvent } from '@comment-automations/gateway-contract';
+import type {
+  IngestResponse,
+  InboundEvent,
+  MessageEvent,
+} from '@comment-automations/gateway-contract';
 import { commentId, conversationId, postId } from '@comment-automations/shared';
 import type { Transaction } from 'kysely';
+import { sql } from 'kysely';
 import type { Database, RunContext } from '../db/types.js';
 import { json } from '../db/types.js';
 import type { Deps } from '../executor/send.js';
 import { selectForComment, selectForMessage } from '../runs/match.js';
 import { resumeWaitingRun } from '../runs/resume.js';
 import { liveAutomations, startRun } from '../runs/start.js';
-import { loadRun } from '../runs/store.js';
+import { loadRun, logRun } from '../runs/store.js';
 
 type Outcome = 'accepted' | 'duplicate';
 
-const withoutNul = <T>(value: T): T => {
-  if (typeof value === 'string') {
-    return value.replaceAll('\u0000', '') as T;
+const TEXT_LIMIT = 10_000;
+
+const firstCodeUnits = (text: string): string => {
+  const cut = text.slice(0, TEXT_LIMIT);
+  return /[\uD800-\uDBFF]$/.test(cut) ? cut.slice(0, -1) : cut;
+};
+
+const capped = (event: InboundEvent): InboundEvent =>
+  event.kind === 'comment'
+    ? {
+        ...event,
+        authorHandle: firstCodeUnits(event.authorHandle),
+        text: firstCodeUnits(event.text),
+      }
+    : {
+        ...event,
+        senderHandle: firstCodeUnits(event.senderHandle),
+        text: firstCodeUnits(event.text),
+      };
+
+const logRedeliveredMessage = async (
+  trx: Transaction<Database>,
+  event: MessageEvent,
+  now: Date,
+): Promise<void> => {
+  const original = await trx
+    .selectFrom('events')
+    .select('id')
+    .where('platform', '=', event.platform)
+    .where('message_id', '=', event.messageId)
+    .where('external_event_id', '!=', event.eventId)
+    .executeTakeFirst();
+  if (original === undefined) {
+    return;
   }
-  if (Array.isArray(value)) {
-    return value.map(withoutNul) as T;
+  const handled = await trx
+    .selectFrom('runs')
+    .select('id')
+    .where((eb) =>
+      eb.or([
+        eb('trigger_event_id', '=', original.id),
+        sql<boolean>`runs.context->'consumedEventIds' @> to_jsonb(${original.id}::text)`,
+      ]),
+    )
+    .execute();
+  for (const { id } of handled) {
+    await logRun(trx, id, now, {
+      stepIndex: null,
+      message: 'Ignored a redelivered message: this run already handled it',
+      context: { eventId: event.eventId },
+    });
   }
-  if (typeof value === 'object' && value !== null) {
-    return Object.fromEntries(
-      Object.entries(value).map(([key, entry]) => [key, withoutNul(entry)]),
-    ) as T;
-  }
-  return value;
 };
 
 const processEvent = async (
@@ -32,7 +76,7 @@ const processEvent = async (
   received: InboundEvent,
 ): Promise<Outcome> => {
   const now = deps.clock.now();
-  const event = withoutNul(received);
+  const event = capped(received);
   const inserted = await trx
     .insertInto('events')
     .values({
@@ -40,13 +84,17 @@ const processEvent = async (
       account_id: event.accountId,
       external_event_id: event.eventId,
       kind: event.kind,
+      message_id: event.kind === 'message' ? event.messageId : null,
       payload: json(event),
       received_at: now,
     })
-    .onConflict((conflict) => conflict.columns(['platform', 'external_event_id']).doNothing())
+    .onConflict((conflict) => conflict.doNothing())
     .returning('id')
     .executeTakeFirst();
   if (inserted === undefined) {
+    if (event.kind === 'message') {
+      await logRedeliveredMessage(trx, event, now);
+    }
     return 'duplicate';
   }
   const account = await trx
@@ -112,7 +160,10 @@ const processEvent = async (
   let resumed = false;
   for (const { id } of waiting) {
     const loaded = await loadRun(trx, id);
-    if (loaded !== undefined && (await resumeWaitingRun(deps, trx, loaded, event))) {
+    if (
+      loaded !== undefined &&
+      (await resumeWaitingRun(deps, trx, loaded, [{ eventId: inserted.id, event }]))
+    ) {
       resumed = true;
     }
   }
