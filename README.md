@@ -5,6 +5,7 @@ This is a service that runs automations triggered by comments and messages on so
 ## What it has
 
 I want to show how a well-built project looks when its built with one AI-powered software engineer. When writing any code costs you zero, what costs now? Judgement, taste and imagination:
+
 - All human and AI decisions are documented
 - There is a test stand that fully verifies validity of the software
 - Github CI
