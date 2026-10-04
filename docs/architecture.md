@@ -152,6 +152,8 @@ Queue: `SELECT … FROM jobs WHERE status='pending' AND run_at <= $now AND (lock
 
 Context jsonb on a run: `{ commentId?, postId?, conversationId?, lastInboundAt, consumedEventIds?, captured: { email? }, replied: boolean }`. `consumedEventIds` lists the message events this run has processed as replies (AD-024).
 
+Duplicate message events stored before the `(platform, message_id)` index existed are reduced by migration 0003 before it creates the index: the earliest event of each group keeps its `message_id`, a later one that a run uses as `trigger_event_id` stays with `message_id` NULL, and the other later ones are deleted.
+
 ## 6. Execution
 
 1. **Ingest.** Verify token; the body is at most 256 KB (413 above). Every request body app-wide has already had U+0000 stripped and lone surrogates replaced with U+FFFD by a `preValidation` hook. Cut `text` and the author or sender handle to their first 10,000 UTF-16 code units. Insert each event; a unique-violation on the event id or on `(platform, messageId)` is a duplicate and is counted, not processed; a message redelivered under a new event id is logged on every run that handled the original and never resumes a run (AD-024).
