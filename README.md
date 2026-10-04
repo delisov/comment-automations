@@ -44,7 +44,7 @@ Both services run on a controlled clock that only moves when you move it, so a 7
 10. In the stand, switch to the **bluesky** tab, stay @jane.doe and comment `pricing?` under a post. The conversation shows the question. Now click **+24 h** in the top bar: both clocks advance by a day and the reminder appears in the conversation; the run's timeline in the product UI reads "Reminder sent".
 11. Click **+7 d**: the wait runs out and the run becomes **Expired**.
 
-**Reset** in the stand's top bar empties the world; **Seed** creates it again.
+**Reset** in the stand's top bar, after a confirmation, restores the starting accounts, posts and users, clears every comment and message and sets both clocks to now; your automations are kept.
 
 ## Run the cycles
 
