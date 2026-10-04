@@ -1,11 +1,21 @@
 import type { AutomationSummary } from '@comment-automations/api-schema';
 import type { AccountId } from '@comment-automations/shared';
-import { useState } from 'react';
-import { useNavigate } from 'react-router';
+import { useCallback, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router';
 import type { Account } from '../api/client.js';
 import { api } from '../api/client.js';
 import { formatRelative, plural } from '../format.js';
-import { Button, Callout, Empty, Pill, PlatformBadge, platformLabel, Skeleton } from '../ui.js';
+import type { ToastMessage } from '../ui.js';
+import {
+  Button,
+  Callout,
+  Empty,
+  Pill,
+  PlatformBadge,
+  platformLabel,
+  Skeleton,
+  Toast,
+} from '../ui.js';
 import { useAsync } from '../useAsync.js';
 import { NewAutomationModal } from './NewAutomationModal.js';
 
@@ -101,6 +111,11 @@ const Table = ({
 
 export const OverviewPage = () => {
   const navigate = useNavigate();
+  const location = useLocation();
+  const [toast, setToast] = useState<ToastMessage | null>(
+    (location.state as { toast?: ToastMessage } | null)?.toast ?? null,
+  );
+  const clearToast = useCallback(() => setToast(null), []);
   const automations = useAsync(() => api.automations(), []);
   const accounts = useAsync(() => api.accounts(), []);
   const clock = useAsync(() => api.clock(), []);
@@ -227,6 +242,7 @@ export const OverviewPage = () => {
           onCreated={(automation) => navigate(`/automations/${automation.id}`)}
         />
       ) : null}
+      <Toast toast={toast} onDone={clearToast} />
     </>
   );
 };

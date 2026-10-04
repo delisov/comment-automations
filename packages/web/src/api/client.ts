@@ -136,6 +136,7 @@ export const api = {
   draftFromVersion: (id: AutomationId, versionId: VersionId) =>
     post<AutomationDetail>(`/automations/${id}/draft-from-version`, { versionId }),
   pause: (id: AutomationId) => post<AutomationDetail>(`/automations/${id}/pause`),
+  archive: (id: AutomationId) => request<null>(`/automations/${id}`, { method: 'DELETE' }),
   versions: async (id: AutomationId) =>
     unwrap<Version>(await request<unknown>(`/automations/${id}/versions`), 'versions'),
   runs: (id: AutomationId, filter: RunsFilter) =>

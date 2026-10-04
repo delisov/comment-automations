@@ -93,7 +93,7 @@ const mockFetch = (overrides: Record<string, () => Response | Promise<Response>>
         headers: init?.headers,
         body: typeof init?.body === 'string' ? JSON.parse(init.body) : undefined,
       });
-      const override = overrides[url];
+      const override = overrides[`${init?.method ?? 'GET'} ${url}`] ?? overrides[url];
       if (override !== undefined) {
         return override();
       }
@@ -235,6 +235,49 @@ describe('editor page', () => {
     await screen.findByText('body must be object');
   });
 
+  it('archives the automation after confirmation and returns to the overview', async () => {
+    const calls = mockFetch({
+      'DELETE /automations/a_1': () => new Response(null, { status: 204 }),
+    });
+    renderEditor();
+    await screen.findByText('Not published yet');
+    fireEvent.click(screen.getByRole('button', { name: 'Archive' }));
+    const dialog = screen.getByRole('dialog', { name: 'Archive "Pricing lead capture"?' });
+    expect(dialog.textContent).toContain('stops for good');
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Archive' }));
+    await screen.findByText('overview');
+    expect(calls.filter((call) => call.method === 'DELETE')).toEqual([
+      {
+        url: '/automations/a_1',
+        method: 'DELETE',
+        headers: { accept: 'application/json' },
+        body: undefined,
+      },
+    ]);
+  });
+
+  it('sends nothing when archiving is cancelled', async () => {
+    const calls = mockFetch();
+    renderEditor();
+    await screen.findByText('Not published yet');
+    fireEvent.click(screen.getByRole('button', { name: 'Archive' }));
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Cancel' }));
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(calls.filter((call) => call.method !== 'GET')).toEqual([]);
+  });
+
+  it('opens an archived automation read-only without mutating actions', async () => {
+    mockFetch({
+      '/automations/a_1': () => json({ ...liveDetail, state: 'archived' }),
+      '/automations/a_1/versions': () => json({ versions: [liveVersion] }),
+    });
+    renderEditor();
+    await screen.findByText('Archived');
+    expect(screen.getAllByRole('button').map((button) => button.textContent)).toEqual(['Versions']);
+    expect((screen.getByLabelText('Reply text') as HTMLTextAreaElement).readOnly).toBe(true);
+    expect(screen.queryByText('+ Add step')).toBeNull();
+  });
+
   it('drops the comments trigger WhatsApp does not allow and saves the fix', async () => {
     const calls = mockFetch({
       '/automations/a_1': () => json(whatsappDetail),
@@ -242,21 +285,26 @@ describe('editor page', () => {
     });
     renderEditor();
     await screen.findByText('Not published yet');
-    expect(screen.getAllByRole('checkbox').map((box) => box.getAttribute('aria-label'))).toEqual([
-      'sends a message',
-    ]);
+    await waitFor(() =>
+      expect(screen.getAllByRole('checkbox').map((box) => box.getAttribute('aria-label'))).toEqual([
+        'sends a message',
+      ]),
+    );
     expect(screen.queryByText('Any post')).toBeNull();
     expect(screen.queryByText('Choose a post')).toBeNull();
 
-    fireEvent.click(screen.getByText('DM automations'));
+    fireEvent.click(await screen.findByText('DM automations'));
     await screen.findByText('Leave without saving?');
     fireEvent.click(screen.getByText('Keep editing'));
+    await waitFor(() => expect(screen.queryByText('Leave without saving?')).toBeNull());
 
-    fireEvent.click(screen.getByText('Save draft'));
-    await waitFor(() =>
-      expect(calls.find((call) => call.url === '/automations/a_1/draft')?.body).toEqual({
+    fireEvent.click(await screen.findByText('Save draft'));
+    await waitFor(() => {
+      const save = calls.find((call) => call.url === '/automations/a_1/draft');
+      expect(save?.method).toBe('PUT');
+      expect(save?.body).toEqual({
         definition: { trigger: { onRepeatWhileWaiting: 'supersede' }, steps: [] },
-      }),
-    );
+      });
+    });
   });
 });

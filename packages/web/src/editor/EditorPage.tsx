@@ -7,6 +7,7 @@ import type {
 import type { AutomationId, VersionId } from '@comment-automations/shared';
 import { automationId, capabilities, versionId } from '@comment-automations/shared';
 import { useCallback, useEffect, useState } from 'react';
+import { flushSync } from 'react-dom';
 import { Link, useBlocker, useNavigate, useParams } from 'react-router';
 import { AnalyticsTab } from '../analytics/AnalyticsTab.js';
 import type { Version } from '../api/client.js';
@@ -37,6 +38,7 @@ type Tab = 'editor' | 'runs' | 'analytics';
 type Dialog =
   | { kind: 'publish' }
   | { kind: 'moveToDraft' }
+  | { kind: 'archive' }
   | { kind: 'versions' }
   | { kind: 'wiki' }
   | { kind: 'makeActive'; version: Version };
@@ -227,6 +229,8 @@ export const EditorPage = ({ tab }: { tab: Tab }) => {
       ? null
       : (versionList.find((item) => item.id === viewingVersion) ?? null);
   const readOnly = viewingVersion !== null;
+  const archived = automation.state === 'archived';
+  const locked = readOnly || archived;
   const active = versionList.find((item) => item.isActive) ?? null;
   const nextNumber = versionList.reduce((max, item) => Math.max(max, item.number), 0) + 1;
   const hasMessageStep = definition.steps.some((step) => step.kind === 'send_message');
@@ -298,6 +302,20 @@ export const EditorPage = ({ tab }: { tab: Tab }) => {
     }
   };
 
+  const archive = async () => {
+    setDialog(null);
+    setBusy(true);
+    try {
+      await api.archive(id);
+      flushSync(() => setSaved(JSON.stringify(definition)));
+      navigate('/', { state: { toast: { tone: 'ok', text: `Archived ${automation.name}` } } });
+    } catch (failure) {
+      failToast(failure);
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const makeActive = async (version: Version) => {
     setDialog(null);
     setBusy(true);
@@ -356,8 +374,15 @@ export const EditorPage = ({ tab }: { tab: Tab }) => {
         </Button>
       )}
     </>
+  ) : archived ? (
+    <Button kind="ghost" onClick={() => setDialog({ kind: 'versions' })}>
+      Versions
+    </Button>
   ) : automation.state === 'live' ? (
     <>
+      <Button kind="ghost" disabled={busy} onClick={() => setDialog({ kind: 'archive' })}>
+        Archive
+      </Button>
       <Button kind="ghost" disabled={busy} onClick={() => setDialog({ kind: 'moveToDraft' })}>
         Move to draft
       </Button>
@@ -370,6 +395,9 @@ export const EditorPage = ({ tab }: { tab: Tab }) => {
     </>
   ) : (
     <>
+      <Button kind="ghost" disabled={busy} onClick={() => setDialog({ kind: 'archive' })}>
+        Archive
+      </Button>
       <Button kind="sec" disabled={busy} onClick={saveDraft}>
         {busy ? 'Saving…' : 'Save draft'}
       </Button>
@@ -467,7 +495,7 @@ export const EditorPage = ({ tab }: { tab: Tab }) => {
             caps={caps}
             accountId={automation.accountId}
             issues={issues}
-            readOnly={readOnly}
+            readOnly={locked}
             onChange={(trigger) => setDefinition({ ...definition, trigger })}
           />
           <StepsCard
@@ -475,7 +503,7 @@ export const EditorPage = ({ tab }: { tab: Tab }) => {
             trigger={definition.trigger}
             caps={caps}
             issues={issues}
-            readOnly={readOnly}
+            readOnly={locked}
             onChange={(steps) => setDefinition({ ...definition, steps })}
           />
         </>
@@ -490,6 +518,7 @@ export const EditorPage = ({ tab }: { tab: Tab }) => {
           versions={versionList}
           hasDraft={automation.draft !== null || dirty}
           inProgress={inProgress}
+          readOnly={archived}
           onClose={() => setDialog(null)}
           onView={(version) => {
             setDialog(null);
@@ -585,6 +614,27 @@ export const EditorPage = ({ tab }: { tab: Tab }) => {
                 Cancel
               </Button>
               <Button onClick={moveToDraft}>Move to draft</Button>
+            </>
+          }
+        />
+      ) : null}
+      {dialog?.kind === 'archive' ? (
+        <Modal
+          title={`Archive "${automation.name}"?`}
+          text={`It disappears from the list and stops for good${
+            inProgressRuns.data === undefined || inProgressRuns.data.runs.length === 0
+              ? ''
+              : `; ${inProgressRuns.data.runs.length} runs in progress stop`
+          }. Its runs and analytics stay readable.`}
+          onClose={() => setDialog(null)}
+          footer={
+            <>
+              <Button kind="sec" onClick={() => setDialog(null)}>
+                Cancel
+              </Button>
+              <Button kind="danger" onClick={archive}>
+                Archive
+              </Button>
             </>
           }
         />
