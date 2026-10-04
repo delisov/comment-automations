@@ -54,6 +54,20 @@ export const instagramReplyOnly: Definition = {
   steps: [{ kind: 'reply_to_comment', text: 'Thanks for asking, {{contact.handle}}!' }],
 };
 
+export const instagramReplyOnKeyword = (keyword: string): Definition => ({
+  trigger: { ...onComments, comments: { posts: { kind: 'any' }, keywords: [keyword] } },
+  steps: [{ kind: 'reply_to_comment', text: `Thanks for the ${keyword}, {{contact.handle}}!` }],
+});
+
+export const tiktokElevenMessages: Definition = {
+  trigger: { messages: { keywords: [KEYWORD] }, onRepeatWhileWaiting: 'supersede' },
+  steps: Array.from({ length: 11 }, (_, index) => ({
+    kind: 'send_message' as const,
+    text: `Message ${String(index + 1)} of 11`,
+    buttons: [],
+  })),
+};
+
 export const blueskyReminder: Definition = {
   trigger: onComments,
   steps: [

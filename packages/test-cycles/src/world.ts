@@ -122,6 +122,7 @@ export const createWorld = async (options: WorldOptions): Promise<World> => {
       await stand.seed();
       await api.reset();
       webhook.calls.length = 0;
+      webhook.status = 200;
     },
     close: () => webhook.close(),
   };
