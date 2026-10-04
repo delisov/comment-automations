@@ -134,6 +134,20 @@ const detailOf = async (
 
 const notFound = (reply: FastifyReply) => reply.status(404).send({ error: 'Automation not found' });
 
+const refuseArchived = (reply: FastifyReply) =>
+  reply.status(409).send({ error: 'An archived automation cannot be changed' });
+
+const dateBound = (name: string, value: string | undefined): Date | undefined => {
+  if (value === undefined) {
+    return undefined;
+  }
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    throw Object.assign(new Error(`${name} is not a valid date-time`), { statusCode: 400 });
+  }
+  return date;
+};
+
 const publishNote = (body: unknown): string => {
   const note =
     typeof body === 'object' && body !== null ? (body as { note?: unknown }).note : undefined;
@@ -208,7 +222,12 @@ export const registerAutomationRoutes = (app: App, deps: AppDeps): void => {
         params: IdParams,
         querystring: ForceQuery,
         body: UpdateDraftRequest,
-        response: { 200: AutomationDetailSchema, 404: ErrorResponse, 422: IssuesResponse },
+        response: {
+          200: AutomationDetailSchema,
+          404: ErrorResponse,
+          409: ErrorResponse,
+          422: IssuesResponse,
+        },
       },
     },
     async (request, reply) => {
@@ -217,6 +236,9 @@ export const registerAutomationRoutes = (app: App, deps: AppDeps): void => {
       const row = await automationRows(db).where('automations.id', '=', id).executeTakeFirst();
       if (row === undefined) {
         return notFound(reply);
+      }
+      if (row.state === 'archived') {
+        return refuseArchived(reply);
       }
       const issues = validateDefinition(request.body.definition, capabilities[row.platform]);
       if (issues.length > 0 && request.query.force !== true) {
@@ -343,12 +365,19 @@ export const registerAutomationRoutes = (app: App, deps: AppDeps): void => {
       schema: {
         params: IdParams,
         body: ActivateVersionRequest,
-        response: { 200: AutomationDetailSchema, 404: ErrorResponse },
+        response: { 200: AutomationDetailSchema, 404: ErrorResponse, 409: ErrorResponse },
       },
     },
     async (request, reply) => {
       const id = request.params.id as AutomationId;
       const now = deps.clock.now();
+      const row = await automationRows(db).where('automations.id', '=', id).executeTakeFirst();
+      if (row === undefined) {
+        return notFound(reply);
+      }
+      if (row.state === 'archived') {
+        return refuseArchived(reply);
+      }
       const version = await db
         .selectFrom('automation_versions')
         .select('id')
@@ -373,12 +402,19 @@ export const registerAutomationRoutes = (app: App, deps: AppDeps): void => {
       schema: {
         params: IdParams,
         body: ActivateVersionRequest,
-        response: { 200: AutomationDetailSchema, 404: ErrorResponse },
+        response: { 200: AutomationDetailSchema, 404: ErrorResponse, 409: ErrorResponse },
       },
     },
     async (request, reply) => {
       const id = request.params.id as AutomationId;
       const now = deps.clock.now();
+      const row = await automationRows(db).where('automations.id', '=', id).executeTakeFirst();
+      if (row === undefined) {
+        return notFound(reply);
+      }
+      if (row.state === 'archived') {
+        return refuseArchived(reply);
+      }
       const version = await db
         .selectFrom('automation_versions')
         .select('definition')
@@ -411,6 +447,9 @@ export const registerAutomationRoutes = (app: App, deps: AppDeps): void => {
       const row = await automationRows(db).where('automations.id', '=', id).executeTakeFirst();
       if (row === undefined) {
         return notFound(reply);
+      }
+      if (row.state === 'archived') {
+        return refuseArchived(reply);
       }
       if (row.state !== 'live') {
         return reply.status(409).send({ error: 'Only a live automation can be paused' });
@@ -514,12 +553,11 @@ export const registerAutomationRoutes = (app: App, deps: AppDeps): void => {
       if (exists === undefined) {
         return notFound(reply);
       }
-      const { versionIds, since, until } = request.query;
       return analytics(db, {
         automationId: id,
-        versionIds,
-        since: since === undefined ? undefined : new Date(since),
-        until: until === undefined ? undefined : new Date(until),
+        versionIds: request.query.versionIds,
+        since: dateBound('since', request.query.since),
+        until: dateBound('until', request.query.until),
       });
     },
   );

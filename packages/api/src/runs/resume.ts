@@ -1,4 +1,5 @@
 import type { MessageEvent } from '@comment-automations/gateway-contract';
+import type { EventId } from '@comment-automations/shared';
 import { conversationId, extractEmail } from '@comment-automations/shared';
 import { sql } from 'kysely';
 import type { Db, RunContext } from '../db/types.js';
@@ -6,6 +7,8 @@ import { json } from '../db/types.js';
 import type { Deps } from '../executor/send.js';
 import type { LoadedRun } from './store.js';
 import { enqueueJob, finishRun, logRun, saveContext } from './store.js';
+
+export type InboundReply = { eventId: EventId; event: MessageEvent };
 
 const nudgePending = async (db: Db, loaded: LoadedRun): Promise<boolean> =>
   (await db
@@ -44,40 +47,60 @@ export const resumeFromWait = async (
   await enqueueJob(db, 'advance', loaded.run.id, now);
 };
 
-export const pendingReply = async (
-  db: Db,
-  loaded: LoadedRun,
-): Promise<MessageEvent | undefined> => {
+export const pendingReplies = async (db: Db, loaded: LoadedRun): Promise<InboundReply[]> => {
+  const { lastInboundAt, consumedEventIds = [] } = loaded.run.context;
+  const since =
+    lastInboundAt === undefined
+      ? loaded.triggerCreatedAt
+      : new Date(Math.max(loaded.triggerCreatedAt.getTime(), Date.parse(lastInboundAt)));
+  const createdAt = sql`(payload->>'createdAt')::timestamptz`;
   let query = db
     .selectFrom('events')
-    .select('payload')
+    .select(['id', 'payload'])
     .where('platform', '=', loaded.account.platform)
     .where('account_id', '=', loaded.account.externalId)
     .where('kind', '=', 'message')
     .where(sql`payload->>'senderId'`, '=', loaded.contact.externalId)
-    .where('received_at', '>=', loaded.run.started_at)
+    .where(createdAt, '>=', since)
     .where(({ not, exists, selectFrom }) =>
       not(
         exists(selectFrom('runs').select('id').whereRef('runs.trigger_event_id', '=', 'events.id')),
       ),
     )
-    .orderBy('received_at', 'desc')
-    .orderBy('id', 'desc')
-    .limit(1);
-  const lastInboundAt = loaded.run.context.lastInboundAt;
-  if (lastInboundAt !== undefined) {
-    query = query.where(sql`(payload->>'createdAt')::timestamptz`, '>', new Date(lastInboundAt));
+    .orderBy(createdAt)
+    .orderBy('received_at')
+    .orderBy('id');
+  if (consumedEventIds.length > 0) {
+    query = query.where('id', 'not in', consumedEventIds);
   }
-  const row = await query.executeTakeFirst();
-  return row?.payload.kind === 'message' ? row.payload : undefined;
+  const rows = await query.execute();
+  return rows.flatMap((row) =>
+    row.payload.kind === 'message' ? [{ eventId: row.id, event: row.payload }] : [],
+  );
+};
+
+export const repliesToProcess = (
+  replies: InboundReply[],
+  expect: 'email' | 'any',
+): InboundReply[] => {
+  if (expect === 'any') {
+    return replies.slice(0, 1);
+  }
+  const withEmail = replies.findIndex(({ event }) => extractEmail(event.text) !== null);
+  return withEmail === -1 ? replies : replies.slice(0, withEmail + 1);
 };
 
 export const resumeWaitingRun = async (
   deps: Deps,
   db: Db,
   loaded: LoadedRun,
-  event: MessageEvent,
+  replies: InboundReply[],
 ): Promise<boolean> => {
+  const reply = replies.at(-1);
+  if (reply === undefined) {
+    return false;
+  }
+  const { event } = reply;
   const now = deps.clock.now();
   const { run } = loaded;
   const stepIndex = run.step_index;
@@ -98,6 +121,10 @@ export const resumeWaitingRun = async (
     ...run.context,
     conversationId: conversationId(event.conversationId),
     lastInboundAt: event.createdAt,
+    consumedEventIds: [
+      ...(run.context.consumedEventIds ?? []),
+      ...replies.map((consumed) => consumed.eventId),
+    ],
     replied: true,
   };
   if (step?.kind !== 'wait_for_reply') {

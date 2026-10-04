@@ -31,6 +31,7 @@ export type LoadedRun = {
   account: { id: AccountId; platform: Platform; externalId: string };
   contact: { id: ContactId; externalId: string; handle: string; email: string | null };
   commentCreatedAt: Date | undefined;
+  triggerCreatedAt: Date;
 };
 
 export type LogEntry = {
@@ -155,6 +156,7 @@ export const loadRun = async (db: Db, runId: RunId): Promise<LoadedRun | undefin
       email: contact_email,
     },
     commentCreatedAt: trigger.kind === 'comment' ? new Date(trigger.createdAt) : undefined,
+    triggerCreatedAt: new Date(trigger.createdAt),
   };
 };
 
