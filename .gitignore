@@ -8,3 +8,4 @@ coverage/
 .claude/
 .secrets/
 *.log
+packages/api/public/
