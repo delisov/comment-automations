@@ -38,6 +38,7 @@ describe('httpGateway', () => {
           method: 'POST',
           headers: { 'content-type': 'application/json', 'x-service-token': 'secret' },
           body: JSON.stringify(request),
+          signal: expect.any(AbortSignal),
         },
       },
     ]);
@@ -69,6 +70,34 @@ describe('httpGateway', () => {
     await expect(gateway.listAccounts()).rejects.toThrow(
       'Gateway answered 502 to GET /gateway/accounts',
     );
+  });
+
+  it('refuses a 2xx body that does not match the contract', async () => {
+    const gateway = httpGateway('http://g', 't', fetchAnswering(200, { unexpected: true }, []));
+
+    expect(
+      await gateway.sendMessage({
+        accountId: 'acc_1',
+        recipient: { conversationId: 'conv_1' },
+        text: 'hi',
+        idempotencyKey: 'run:1:message',
+      }),
+    ).toEqual({
+      ok: false,
+      error: {
+        code: 'MALFORMED_RESPONSE',
+        message: 'The gateway answered outside the contract',
+        retryable: false,
+      },
+    });
+    expect(await gateway.listAccounts()).toEqual({
+      ok: false,
+      error: {
+        code: 'MALFORMED_RESPONSE',
+        message: 'The gateway answered outside the contract',
+        retryable: false,
+      },
+    });
   });
 
   it('unwraps account and post listings', async () => {

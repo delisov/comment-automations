@@ -13,6 +13,7 @@ const build = (testMode: boolean) =>
     fetch,
     serviceToken: 'secret',
     testMode,
+    webhookAllowPrivate: false,
     publicDir: 'does-not-exist',
   });
 
@@ -34,6 +35,7 @@ describe('buildApp', () => {
     const setOnSystemClock = await test.inject({
       method: 'POST',
       url: '/test/clock',
+      headers: { 'x-service-token': 'secret' },
       payload: { now: '2026-10-04T10:00:00Z' },
     });
     await real.close();
@@ -42,6 +44,24 @@ describe('buildApp', () => {
     expect(hidden.statusCode).toBe(404);
     expect(shown.statusCode).toBe(200);
     expect(setOnSystemClock.statusCode).toBe(409);
+  });
+
+  it('refuses to move the clock or reset the database without the service token', async () => {
+    const app = build(true);
+    const clock = await app.inject({
+      method: 'POST',
+      url: '/test/clock',
+      payload: { now: '2026-10-04T10:00:00Z' },
+    });
+    const reset = await app.inject({
+      method: 'POST',
+      url: '/test/reset',
+      headers: { 'x-service-token': 'wrong' },
+    });
+    await app.close();
+
+    expect([clock.statusCode, clock.json()]).toEqual([401, { error: 'Invalid service token' }]);
+    expect([reset.statusCode, reset.json()]).toEqual([401, { error: 'Invalid service token' }]);
   });
 
   it('rejects ingestion without the service token before touching the database', async () => {

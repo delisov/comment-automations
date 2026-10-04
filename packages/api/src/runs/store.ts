@@ -11,7 +11,15 @@ import type {
 } from '@comment-automations/shared';
 import { capabilities } from '@comment-automations/shared';
 import type { Selectable } from 'kysely';
-import type { Db, JobKind, LogLevel, RunContext, RunError, RunsTable } from '../db/types.js';
+import type {
+  Db,
+  JobKind,
+  LogLevel,
+  RunContext,
+  RunError,
+  RunStatus,
+  RunsTable,
+} from '../db/types.js';
 import { json } from '../db/types.js';
 
 export type LoadedRun = {
@@ -32,6 +40,11 @@ export type LogEntry = {
   context?: Record<string, unknown>;
 };
 
+export const ACTIVE_STATUSES: RunStatus[] = ['running', 'waiting'];
+
+export const inTransaction = <T>(db: Db, work: (trx: Db) => Promise<T>): Promise<T> =>
+  db.isTransaction ? work(db) : db.transaction().execute(work);
+
 export const logRun = async (db: Db, runId: RunId, at: Date, entry: LogEntry): Promise<void> => {
   await db
     .insertInto('run_logs')
@@ -45,6 +58,20 @@ export const logRun = async (db: Db, runId: RunId, at: Date, entry: LogEntry): P
     })
     .execute();
 };
+
+export const logMovedOn = (
+  db: Db,
+  runId: RunId,
+  at: Date,
+  stepIndex: number | null,
+  attempted: string,
+): Promise<void> =>
+  logRun(db, runId, at, {
+    stepIndex,
+    level: 'warn',
+    message: 'Ignored a late update: the run had already moved on',
+    context: { attempted },
+  });
 
 export const enqueueJob = async (
   db: Db,
@@ -61,9 +88,20 @@ export const cancelTimers = async (db: Db, runId: RunId): Promise<void> => {
     .set({ status: 'done' })
     .where('run_id', '=', runId)
     .where('status', '=', 'pending')
-    .where('kind', 'in', ['reminder', 'give_up'])
+    .where('kind', 'in', ['reminder', 'give_up', 'nudge'])
     .execute();
 };
+
+export const lockRun = (
+  db: Db,
+  runId: RunId,
+): Promise<Pick<Selectable<RunsTable>, 'status' | 'step_index' | 'wait_until'> | undefined> =>
+  db
+    .selectFrom('runs')
+    .select(['status', 'step_index', 'wait_until'])
+    .where('id', '=', runId)
+    .forUpdate()
+    .executeTakeFirst();
 
 export const loadRun = async (db: Db, runId: RunId): Promise<LoadedRun | undefined> => {
   const row = await db
@@ -125,33 +163,49 @@ export const saveContext = async (
   runId: RunId,
   context: RunContext,
   now: Date,
+  expected: RunStatus,
   patch: Partial<Pick<Selectable<RunsTable>, 'step_index' | 'nudged' | 'reminder_sent'>> = {},
-): Promise<void> => {
-  await db
+): Promise<boolean> => {
+  const result = await db
     .updateTable('runs')
     .set({ ...patch, context: json(context), updated_at: now })
     .where('id', '=', runId)
-    .execute();
+    .where('status', '=', expected)
+    .executeTakeFirst();
+  return result.numUpdatedRows > 0n;
 };
 
-export const finishRun = async (
+export const finishRun = (
   db: Db,
   runId: RunId,
   status: 'completed' | 'failed' | 'expired' | 'superseded',
   now: Date,
   entry: LogEntry,
   error: RunError | null = null,
-): Promise<void> => {
-  await db
-    .updateTable('runs')
-    .set({ status, error: error === null ? null : json(error), finished_at: now, updated_at: now })
-    .where('id', '=', runId)
-    .execute();
-  await cancelTimers(db, runId);
-  await logRun(db, runId, now, entry);
-};
+  from: RunStatus[] = ACTIVE_STATUSES,
+): Promise<boolean> =>
+  inTransaction(db, async (trx) => {
+    const result = await trx
+      .updateTable('runs')
+      .set({
+        status,
+        error: error === null ? null : json(error),
+        finished_at: now,
+        updated_at: now,
+      })
+      .where('id', '=', runId)
+      .where('status', 'in', from)
+      .executeTakeFirst();
+    if (result.numUpdatedRows === 0n) {
+      await logMovedOn(trx, runId, now, entry.stepIndex, status);
+      return false;
+    }
+    await cancelTimers(trx, runId);
+    await logRun(trx, runId, now, entry);
+    return true;
+  });
 
-export const failRun = (db: Db, loaded: LoadedRun, error: RunError, now: Date): Promise<void> =>
+export const failRun = (db: Db, loaded: LoadedRun, error: RunError, now: Date): Promise<boolean> =>
   finishRun(
     db,
     loaded.run.id,

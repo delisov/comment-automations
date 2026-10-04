@@ -18,7 +18,18 @@ describe('loadConfig', () => {
       gitSha: 'dev',
       clockMode: 'system',
       workerPollMs: 500,
+      webhookAllowPrivate: false,
     });
+  });
+
+  it('allows private webhook addresses only in test mode', () => {
+    expect(
+      loadConfig({ ...base, GATEWAY_MODE: 'test', WEBHOOK_ALLOW_PRIVATE: 'true' })
+        .webhookAllowPrivate,
+    ).toBe(true);
+    expect(() => loadConfig({ ...base, WEBHOOK_ALLOW_PRIVATE: 'true' })).toThrow(
+      'GATEWAY_MODE=real cannot run with WEBHOOK_ALLOW_PRIVATE=true',
+    );
   });
 
   it('test mode turns the controlled clock on unless told otherwise', () => {
