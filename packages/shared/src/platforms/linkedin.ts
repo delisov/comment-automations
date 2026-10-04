@@ -11,6 +11,7 @@ export const linkedin: CapabilityRecord = {
   reminderBeforeReply: false,
   messageLimits: { maxChars: 0, buttons: 0, linksInText: false },
   replyLimits: { maxChars: 1250 },
+  handleMaxChars: 101,
   ownActivityEcho: true,
   access: 'partnerOnly',
 };

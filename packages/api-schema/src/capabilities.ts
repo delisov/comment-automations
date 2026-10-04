@@ -40,6 +40,7 @@ export const CapabilityRecord = Type.Object({
     linksInText: Type.Boolean(),
   }),
   replyLimits: Type.Object({ maxChars: Type.Number() }),
+  handleMaxChars: Type.Number(),
   maxConsecutiveMessages: Type.Optional(Type.Number()),
   ownActivityEcho: Type.Boolean(),
   access: Type.Union([

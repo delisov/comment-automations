@@ -33,6 +33,7 @@ describe.skipIf(!databaseUrl)('stand against a real database', () => {
   let stub: http.Server;
   let clock: ControlledClock;
   const received: Received[] = [];
+  let serviceNow = t0;
 
   const gateway = (method: 'GET' | 'POST', url: string, body?: unknown) =>
     app.inject({
@@ -53,6 +54,11 @@ describe.skipIf(!databaseUrl)('stand against a real database', () => {
     db = createDb(databaseUrl!);
     await migrate(db);
     stub = http.createServer((request, response) => {
+      if (request.method === 'GET' && request.url === '/test/clock') {
+        response.writeHead(200, { 'content-type': 'application/json' });
+        response.end(JSON.stringify({ now: serviceNow.toISOString() }));
+        return;
+      }
       let body = '';
       request.on('data', (chunk) => {
         body += chunk;
@@ -85,6 +91,7 @@ describe.skipIf(!databaseUrl)('stand against a real database', () => {
     vi.setSystemTime(t0);
     clock.set(t0);
     received.length = 0;
+    serviceNow = t0;
     await scenario('PUT', '/scenario/settings', {
       burst429: 0,
       dropPercent: 0,
@@ -248,6 +255,27 @@ describe.skipIf(!databaseUrl)('stand against a real database', () => {
         messages: [expect.objectContaining({ from: 'account', text: 'Sent you a DM' })],
       }),
     ]);
+  });
+
+  it('GET /test/clock returns the service clock reading and the stand reading unchanged when the service is ahead', async () => {
+    serviceNow = new Date(t0.getTime() + hours(3));
+    const response = await scenario('GET', '/test/clock');
+    expect(response.json()).toEqual({
+      now: serviceNow.toISOString(),
+      standNow: t0.toISOString(),
+      source: 'service',
+    });
+    expect(clock.now()).toEqual(t0);
+  });
+
+  it('GET /test/clock keeps the stand clock and reports it as the source when the service is behind', async () => {
+    serviceNow = new Date(t0.getTime() - hours(3));
+    const response = await scenario('GET', '/test/clock');
+    expect(response.json()).toEqual({
+      now: serviceNow.toISOString(),
+      standNow: t0.toISOString(),
+      source: 'service',
+    });
   });
 
   it('a private reply 8 days after the comment returns REPLY_WINDOW_CLOSED', async () => {

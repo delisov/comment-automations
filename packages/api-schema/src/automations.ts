@@ -61,7 +61,7 @@ export type AutomationsResponse = Static<typeof AutomationsResponse>;
 
 export const CreateAutomationRequest = Type.Object({
   accountId: AccountIdSchema,
-  name: Type.String({ minLength: 1, maxLength: 120 }),
+  name: Type.String({ pattern: '\\S', maxLength: 120 }),
 });
 
 export type CreateAutomationRequest = Static<typeof CreateAutomationRequest>;

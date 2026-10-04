@@ -5,7 +5,7 @@ import type { Post } from '../api/client.js';
 import { api } from '../api/client.js';
 import { formatDate } from '../format.js';
 import { useAsync } from '../useAsync.js';
-import { ErrorText, issueAt } from './issues.js';
+import { IssueTexts, issuesUnder } from './issues.js';
 
 const Check = ({
   on,
@@ -123,6 +123,14 @@ const triggerControls = (trigger: Trigger, keywords: string[]): TriggerControl[]
   },
 ];
 
+const flaggedKeywords = (issues: ValidationIssue[]): number[] =>
+  issues.flatMap((issue) => {
+    const match = /^trigger\.(comments|messages)\.keywords\.(\d+)$/.exec(issue.path);
+    return match === null ? [] : [Number(match[2])];
+  });
+
+const sameKeyword = (a: string, b: string): boolean => a.toLowerCase() === b.toLowerCase();
+
 const keywordsLabel = (trigger: Trigger): string => {
   if (trigger.comments !== undefined && trigger.messages !== undefined) {
     return 'And the comment or message contains';
@@ -146,24 +154,27 @@ export const TriggerCard = ({
   onChange: (trigger: Trigger) => void;
 }) => {
   const [draft, setDraft] = useState('');
-  const keywords = trigger.comments?.keywords ?? trigger.messages?.keywords ?? [];
-  const keywordsError =
-    issueAt(issues, 'trigger.comments.keywords') ??
-    issueAt(issues, 'trigger') ??
-    issueAt(issues, 'trigger.comments') ??
-    issueAt(issues, 'trigger.messages');
+  const [kept, setKept] = useState<string[]>([]);
+  const keywords = trigger.comments?.keywords ?? trigger.messages?.keywords ?? kept;
+  const postIssues = issuesUnder(issues, 'trigger.comments.posts');
+  const keywordIssues = issuesUnder(issues, 'trigger').filter(
+    (issue) => !postIssues.includes(issue),
+  );
+  const flagged = flaggedKeywords(issues);
 
-  const setKeywords = (next: string[]) =>
+  const setKeywords = (next: string[]) => {
+    setKept(next);
     onChange({
       ...trigger,
       comments:
         trigger.comments === undefined ? undefined : { ...trigger.comments, keywords: next },
       messages: trigger.messages === undefined ? undefined : { keywords: next },
     });
+  };
 
   const addKeyword = () => {
     const word = draft.trim();
-    if (word !== '' && !keywords.includes(word)) {
+    if (word !== '' && !keywords.some((item) => sameKeyword(item, word))) {
       setKeywords([...keywords, word]);
     }
     setDraft('');
@@ -185,7 +196,10 @@ export const TriggerCard = ({
               on={trigger[control.kind] !== undefined}
               label={control.label}
               readOnly={readOnly}
-              onToggle={() => onChange(control.toggled)}
+              onToggle={() => {
+                setKept(keywords);
+                onChange(control.toggled);
+              }}
             />
           ))}
       </div>
@@ -232,13 +246,17 @@ export const TriggerCard = ({
               }}
             />
           ) : null}
+          <IssueTexts issues={postIssues} />
         </div>
       ) : null}
       <div className="field">
         <label>{keywordsLabel(trigger)}</label>
-        <div className="kw" style={keywordsError === null ? undefined : { borderColor: '#dc2626' }}>
-          {keywords.map((word) => (
-            <span key={word}>
+        <div
+          className="kw"
+          style={keywordIssues.length === 0 ? undefined : { borderColor: '#dc2626' }}
+        >
+          {keywords.map((word, index) => (
+            <span key={word} className={flagged.includes(index) ? 'err' : ''}>
               {word}
               {readOnly ? null : (
                 <button
@@ -274,7 +292,7 @@ export const TriggerCard = ({
             />
           )}
         </div>
-        <ErrorText text={keywordsError} />
+        <IssueTexts issues={keywordIssues} />
         <div className="hint" style={{ marginTop: 6 }}>
           Matches whole words, any letter case. Leave empty to match everything.
         </div>

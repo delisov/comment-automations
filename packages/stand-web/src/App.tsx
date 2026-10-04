@@ -2,6 +2,7 @@ import type { Platform } from '@comment-automations/gateway-contract';
 import { useCallback, useEffect, useState } from 'react';
 import type { Delivery, LogEntry, Rules, Settings, State } from './api.js';
 import { PLATFORMS, api } from './api.js';
+import { shiftClock } from './clockControl.js';
 import { Conversation } from './components/Conversation.js';
 import { LogPanel } from './components/LogPanel.js';
 import { Posts } from './components/Posts.js';
@@ -13,6 +14,7 @@ const EMPTY: State = { accounts: [], users: [], posts: [], conversations: [] };
 export const App = () => {
   const [platform, setPlatform] = useState<Platform>(PLATFORMS[0]!);
   const [now, setNow] = useState<string>('');
+  const [standNow, setStandNow] = useState<string>('');
   const [state, setState] = useState<State>(EMPTY);
   const [rules, setRules] = useState<Rules | null>(null);
   const [log, setLog] = useState<LogEntry[]>([]);
@@ -33,6 +35,7 @@ export const App = () => {
     setLog(nextLog);
     setDeliveries(nextDeliveries);
     setNow(clock.now);
+    setStandNow(clock.standNow);
   }, [platform]);
 
   const act = useCallback(
@@ -77,7 +80,9 @@ export const App = () => {
         platform={platform}
         onPlatform={setPlatform}
         now={now}
+        standNow={standNow}
         onClock={(next) => act(() => api.setClock(next))}
+        onShift={(ms) => act(() => shiftClock(api, ms))}
         onReset={() => act(api.reset)}
         onSeed={() => act(api.seed)}
       />

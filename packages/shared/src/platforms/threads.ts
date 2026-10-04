@@ -11,6 +11,7 @@ export const threads: CapabilityRecord = {
   reminderBeforeReply: false,
   messageLimits: { maxChars: 0, buttons: 0, linksInText: false },
   replyLimits: { maxChars: 500 },
+  handleMaxChars: 31,
   ownActivityEcho: true,
   access: 'appReview',
 };

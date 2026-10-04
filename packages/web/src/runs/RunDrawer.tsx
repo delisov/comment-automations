@@ -1,7 +1,9 @@
 import type { RunDetail, RunLogEntry, RunStatus } from '@comment-automations/api-schema';
 import type { RunId } from '@comment-automations/shared';
 import { useCallback, useState } from 'react';
+import type { Version } from '../api/client.js';
 import { api, ApiError } from '../api/client.js';
+import { stepTitle } from '../editor/steps.js';
 import { formatDateTime, formatTime } from '../format.js';
 import type { PillTone, ToastMessage } from '../ui.js';
 import { Button, Callout, Pill, Toast } from '../ui.js';
@@ -47,16 +49,20 @@ const sameDay = (a: string, b: string): boolean => a.slice(0, 10) === b.slice(0,
 
 export const RunDrawer = ({
   runId,
-  stepTitles,
+  versions,
   onClose,
   onChanged,
 }: {
   runId: RunId;
-  stepTitles: string[];
+  versions: Version[];
   onClose: () => void;
   onChanged: () => void;
 }) => {
   const run = useAsync(() => api.run(runId), [runId]);
+  const stepTitles =
+    versions
+      .find((version) => version.number === run.data?.versionNumber)
+      ?.definition?.steps.map(stepTitle) ?? [];
   const [stopping, setStopping] = useState(false);
   const [toast, setToast] = useState<ToastMessage | null>(null);
   const clearToast = useCallback(() => setToast(null), []);
