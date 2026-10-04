@@ -5,7 +5,9 @@ type Props = {
   platform: Platform;
   onPlatform: (platform: Platform) => void;
   now: string;
+  standNow: string;
   onClock: (now: string) => void;
+  onShift: (ms: number) => void;
   onReset: () => void;
   onSeed: () => void;
 };
@@ -21,8 +23,18 @@ const toLocalInput = (iso: string): string => {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 };
 
-export const TopBar = ({ platform, onPlatform, now, onClock, onReset, onSeed }: Props) => {
-  const shift = (ms: number) => onClock(new Date(new Date(now).getTime() + ms).toISOString());
+export const TopBar = ({
+  platform,
+  onPlatform,
+  now,
+  standNow,
+  onClock,
+  onShift,
+  onReset,
+  onSeed,
+}: Props) => {
+  const diverged =
+    Boolean(now && standNow) && Math.abs(Date.parse(now) - Date.parse(standNow)) > 1000;
   return (
     <div className="topbar">
       <div className="tabs">
@@ -37,14 +49,15 @@ export const TopBar = ({ platform, onPlatform, now, onClock, onReset, onSeed }: 
         ))}
       </div>
       <div className="clock">
-        <span className="now">{now || '…'}</span>
-        <button onClick={() => shift(HOUR)} disabled={!now}>
+        <span className="now">{diverged ? `service clock ${now}` : now || '…'}</span>
+        {diverged && <span className="notice">stand clock {standNow}</span>}
+        <button onClick={() => onShift(HOUR)} disabled={!now}>
           +1 h
         </button>
-        <button onClick={() => shift(24 * HOUR)} disabled={!now}>
+        <button onClick={() => onShift(24 * HOUR)} disabled={!now}>
           +24 h
         </button>
-        <button onClick={() => shift(7 * 24 * HOUR)} disabled={!now}>
+        <button onClick={() => onShift(7 * 24 * HOUR)} disabled={!now}>
           +7 d
         </button>
         <input
