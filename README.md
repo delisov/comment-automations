@@ -1,6 +1,17 @@
 # comment-automations
 
-A service that runs automations triggered by comments and messages on social posts: when someone comments on a post, an automation can reply in the thread, message the commenter, wait for their answer, extract an email, message again and call a webhook with what it collected. It ships with the customer-facing editor, and with a test stand that emulates ten social platforms and their rules, so the whole loop can be run and watched on one machine without touching a real network.
+This is a service that runs automations triggered by comments and messages on social posts: when someone comments on a post, an automation can reply in the thread, message the commenter, wait for their answer, extract an email, message again and call a webhook with what it collected. It ships with the customer-facing editor, and with a test stand that emulates ten social platforms and their rules, so the whole loop can be run and watched on one machine without touching a real network.
+
+## What it has
+
+I want to show how a well-built project looks when its built with one AI-powered software engineer. When writing any code costs you zero, what costs now? Judgement, taste and imagination:
+- All human and AI decisions are documented
+- There is a test stand that fully verifies validity of the software
+- Github CI
+- Integration tests that can also be run as browser-based playwright or Chrome CDP tests
+- It is fully covered with unit tests
+- The code itself does not have comments, because AI has very bad comment maintenance culture
+- The code has multiple passes of QA, security, performance optimization, UX agents, but we still understand that human intervention is very important, and context is everything. Our task as a developer is to provide maximum context for AI to make correct decisions
 
 ## Run it locally
 
@@ -46,7 +57,7 @@ Both services run on a controlled clock that only moves when you move it, so a 7
 
 **Reset** in the stand's top bar, after a confirmation, restores the starting accounts, posts and users, clears every comment and message and sets both clocks to now; your automations are kept.
 
-## Run the cycles
+## Full test cycles
 
 ```sh
 npm run cycles
