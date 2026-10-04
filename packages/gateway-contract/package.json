@@ -1,5 +1,5 @@
 {
-  "name": "@comment-automations/shared",
+  "name": "@comment-automations/gateway-contract",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -15,7 +15,7 @@
     "test": "vitest run",
     "build": "tsc -p tsconfig.build.json"
   },
-  "devDependencies": {
-    "fast-check": "^4.10.2"
+  "dependencies": {
+    "@sinclair/typebox": "^0.34.52"
   }
 }
