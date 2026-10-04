@@ -8,8 +8,8 @@ Prerequisites: Node 22 and Docker.
 
 ```sh
 npm ci
-docker compose up -d --build
-curl localhost:3000/health
+GIT_SHA=$(git rev-parse HEAD) docker compose up -d --build
+curl localhost:3000/health   # prints the sha you just built
 npm test
 ```
 
