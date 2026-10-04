@@ -25,8 +25,35 @@ const forwardClock = async (ctx: Context, body: ClockRequestType): Promise<Servi
   }
 };
 
+const readServiceClock = async (ctx: Context): Promise<Date | null> => {
+  try {
+    const response = await fetch(`${ctx.serviceUrl}/test/clock`, {
+      headers: { 'x-service-token': ctx.serviceToken },
+    });
+    if (!response.ok) {
+      return null;
+    }
+    const body = (await response.json()) as { now?: unknown };
+    const now = new Date(String(body.now));
+    return Number.isNaN(now.getTime()) ? null : now;
+  } catch {
+    return null;
+  }
+};
+
 export const clockRoutes: FastifyPluginAsyncTypebox<{ ctx: Context }> = async (app, { ctx }) => {
-  app.get('/clock', async () => ({ now: ctx.clock.now().toISOString() }));
+  app.get('/clock', async () => {
+    const service = await readServiceClock(ctx);
+    if (service === null) {
+      const now = ctx.clock.now().toISOString();
+      return { now, standNow: now, source: 'stand' as const };
+    }
+    return {
+      now: service.toISOString(),
+      standNow: ctx.clock.now().toISOString(),
+      source: 'service' as const,
+    };
+  });
 
   app.post('/clock', { schema: { body: ClockRequest } }, async (request, reply) => {
     const now = new Date(request.body.now);
@@ -37,6 +64,7 @@ export const clockRoutes: FastifyPluginAsyncTypebox<{ ctx: Context }> = async (a
     }
     ctx.clock.set(now);
     const service = await forwardClock(ctx, { now: now.toISOString() });
+    request.log.info({ now: now.toISOString(), service }, 'stand and service clocks set');
     return { now: now.toISOString(), service };
   });
 };
