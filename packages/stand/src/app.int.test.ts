@@ -3,7 +3,7 @@ import type { AddressInfo } from 'node:net';
 import type { ControlledClock } from '@comment-automations/shared';
 import { controlledClock } from '@comment-automations/shared';
 import type { FastifyInstance } from 'fastify';
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { buildApp } from './app.js';
 import type { Db } from './db/database.js';
 import { createDb } from './db/database.js';
@@ -18,9 +18,9 @@ const days = (n: number) => hours(24 * n);
 type Received = { url: string | undefined; token: string | string[] | undefined; body: unknown };
 
 const waitFor = async (condition: () => Promise<boolean> | boolean): Promise<void> => {
-  const deadline = Date.now() + 3000;
+  const deadline = performance.now() + 3000;
   while (!(await condition())) {
-    if (Date.now() > deadline) {
+    if (performance.now() > deadline) {
       throw new Error('condition not met in time');
     }
     await new Promise((resolve) => setTimeout(resolve, 25));
@@ -48,6 +48,8 @@ describe.skipIf(!databaseUrl)('stand against a real database', () => {
   const deliveries = async () => (await scenario('GET', '/scenario/deliveries')).json<unknown[]>();
 
   beforeAll(async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(t0);
     db = createDb(databaseUrl!);
     await migrate(db);
     stub = http.createServer((request, response) => {
@@ -80,6 +82,7 @@ describe.skipIf(!databaseUrl)('stand against a real database', () => {
   });
 
   beforeEach(async () => {
+    vi.setSystemTime(t0);
     clock.set(t0);
     received.length = 0;
     await scenario('PUT', '/scenario/settings', {
@@ -94,6 +97,7 @@ describe.skipIf(!databaseUrl)('stand against a real database', () => {
     await app.close();
     await new Promise((resolve) => stub.close(resolve));
     await db.destroy();
+    vi.useRealTimers();
   });
 
   it('GET /health answers with the build sha', async () => {
