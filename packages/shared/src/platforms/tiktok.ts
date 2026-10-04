@@ -12,6 +12,7 @@ export const tiktok: CapabilityRecord = {
   reminderBeforeReply: true,
   messageLimits: { maxChars: 1000, buttons: 0, linksInText: true },
   replyLimits: { maxChars: 0 },
+  handleMaxChars: 25,
   maxConsecutiveMessages: 10,
   ownActivityEcho: false,
   access: 'partnerOnly',

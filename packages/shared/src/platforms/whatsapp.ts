@@ -12,6 +12,7 @@ export const whatsapp: CapabilityRecord = {
   reminderBeforeReply: true,
   messageLimits: { maxChars: 4096, buttons: 1, linksInText: true },
   replyLimits: { maxChars: 0 },
+  handleMaxChars: 16,
   ownActivityEcho: false,
   access: 'appReview',
 };

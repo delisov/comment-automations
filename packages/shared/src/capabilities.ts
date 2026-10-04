@@ -27,6 +27,7 @@ export type CapabilityRecord = {
   reminderBeforeReply: boolean;
   messageLimits: MessageLimits;
   replyLimits: ReplyLimits;
+  handleMaxChars: number;
   maxConsecutiveMessages?: number;
   ownActivityEcho: boolean;
   access: Access;

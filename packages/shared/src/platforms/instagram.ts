@@ -12,6 +12,7 @@ export const instagram: CapabilityRecord = {
   reminderBeforeReply: false,
   messageLimits: { maxChars: 1000, maxBytes: 1000, buttons: 3, linksInText: true },
   replyLimits: { maxChars: 1000 },
+  handleMaxChars: 31,
   ownActivityEcho: true,
   access: 'appReview',
 };

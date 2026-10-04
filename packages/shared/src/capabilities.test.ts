@@ -48,8 +48,27 @@ describe('capability records', () => {
       reminderBeforeReply: false,
       messageLimits: { maxChars: 1000, maxBytes: 1000, buttons: 3, linksInText: true },
       replyLimits: { maxChars: 1000 },
+      handleMaxChars: 31,
       ownActivityEcho: true,
       access: 'appReview',
+    });
+  });
+
+  it('carries the longest handle each platform can show, the "@" included', () => {
+    const perPlatform = Object.fromEntries(
+      PLATFORMS.map((platform) => [platform, capabilities[platform].handleMaxChars]),
+    );
+    expect(perPlatform).toEqual({
+      instagram: 31,
+      facebook: 51,
+      threads: 31,
+      x: 16,
+      bluesky: 64,
+      youtube: 31,
+      linkedin: 101,
+      whatsapp: 16,
+      tiktok: 25,
+      pinterest: 31,
     });
   });
 
