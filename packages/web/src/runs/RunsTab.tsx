@@ -24,14 +24,12 @@ export const RunsTab = ({
   versions,
   keywords,
   handle,
-  stepTitles,
   onOpenWiki,
 }: {
   automation: AutomationDetail;
   versions: Version[];
   keywords: string[];
   handle: string;
-  stepTitles: string[];
   onOpenWiki: () => void;
 }) => {
   const [status, setStatus] = useState<RunStatus | null>(null);
@@ -105,7 +103,9 @@ export const RunsTab = ({
       {runs.status === 'loading' && runs.data === undefined ? (
         <Skeleton rows={4} />
       ) : list.length === 0 ? (
-        unfiltered ? (
+        unfiltered && automation.state === 'archived' ? (
+          <Empty title="No runs" text="This automation was archived before it had any runs." />
+        ) : unfiltered ? (
           <Empty
             title="No runs yet"
             text={
@@ -164,7 +164,7 @@ export const RunsTab = ({
       {openRun === null ? null : (
         <RunDrawer
           runId={openRun}
-          stepTitles={stepTitles}
+          versions={versions}
           onClose={() => setOpenRun(null)}
           onChanged={runs.reload}
         />
