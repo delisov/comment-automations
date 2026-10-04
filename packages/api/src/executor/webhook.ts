@@ -1,7 +1,7 @@
 import { lookup } from 'node:dns/promises';
 import { isIP } from 'node:net';
 import type { CallWebhookStep } from '@comment-automations/shared';
-import type { Db } from '../db/types.js';
+import type { Db, RunError } from '../db/types.js';
 import { json } from '../db/types.js';
 import type { LoadedRun } from '../runs/store.js';
 import { logRun } from '../runs/store.js';
@@ -9,15 +9,14 @@ import type { Deps } from './send.js';
 
 const TIMEOUT_MS = 10_000;
 
-type Failure = 'private_address' | 'redirect' | 'timeout' | 'unreachable';
+type Failure = 'private_address' | 'timeout' | 'unreachable';
 
 type Delivery = { status: number } | { failure: Failure };
 
-const FAILURE_MESSAGES: Record<Failure, string> = {
-  private_address: 'Webhook refused: the address is private',
-  redirect: 'Webhook failed: the server redirected',
-  timeout: 'Webhook failed: timed out',
-  unreachable: 'Webhook failed: the server could not be reached',
+const FAILURE_REASONS: Record<Failure, string> = {
+  private_address: 'private address',
+  timeout: 'timed out',
+  unreachable: 'unreachable',
 };
 
 const privateV4 = (address: string): boolean => {
@@ -98,9 +97,6 @@ const attempt = async (deps: Deps, step: CallWebhookStep, body: string): Promise
       redirect: 'manual',
       signal: AbortSignal.timeout(TIMEOUT_MS),
     });
-    if (response.status >= 300 && response.status < 400) {
-      return { failure: 'redirect' };
-    }
     return { status: response.status };
   } catch (error) {
     return {
@@ -115,21 +111,15 @@ const delivered = (delivery: Delivery): boolean =>
 const refused = (delivery: Delivery): boolean =>
   'failure' in delivery && delivery.failure === 'private_address';
 
-const describe = (delivery: Delivery): string => {
-  if ('failure' in delivery) {
-    return FAILURE_MESSAGES[delivery.failure];
-  }
-  return delivered(delivery)
-    ? `Webhook delivered (${delivery.status})`
-    : `Webhook failed (${delivery.status})`;
-};
+const reason = (delivery: Delivery): string =>
+  'failure' in delivery ? FAILURE_REASONS[delivery.failure] : String(delivery.status);
 
 export const callWebhook = async (
   deps: Deps,
   db: Db,
   loaded: LoadedRun,
   step: CallWebhookStep,
-): Promise<{ kind: 'next' }> => {
+): Promise<{ kind: 'next' } | { kind: 'retry'; error: RunError }> => {
   const { run, automation, version, contact } = loaded;
   const payload = {
     automation: { id: automation.id, name: automation.name },
@@ -144,10 +134,7 @@ export const callWebhook = async (
     captured: run.context.captured,
   };
   const body = json(payload);
-  let delivery = await attempt(deps, step, body);
-  if (!delivered(delivery) && !refused(delivery)) {
-    delivery = await attempt(deps, step, body);
-  }
+  const delivery = await attempt(deps, step, body);
   const now = deps.clock.now();
   await db
     .insertInto('outbound_calls')
@@ -164,10 +151,21 @@ export const callWebhook = async (
       conflict.column('idempotency_key').doUpdateSet({ response: json(delivery), at: now }),
     )
     .execute();
+  if (!delivered(delivery) && !refused(delivery)) {
+    return {
+      kind: 'retry',
+      error: {
+        code: 'WEBHOOK_FAILED',
+        message: `Webhook failed (${reason(delivery)}): check the webhook receiver; the run's data was not delivered`,
+      },
+    };
+  }
   await logRun(db, run.id, now, {
     stepIndex: run.step_index,
     level: delivered(delivery) ? 'info' : 'warn',
-    message: describe(delivery),
+    message: delivered(delivery)
+      ? `Webhook delivered (${reason(delivery)})`
+      : 'Webhook refused: the address is private',
     context: { url: step.url, ...delivery },
   });
   return { kind: 'next' };

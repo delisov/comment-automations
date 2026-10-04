@@ -14,6 +14,15 @@ export type { AppDeps } from './routes/types.js';
 export const buildApp = (deps: AppDeps): App => {
   const app = Fastify().withTypeProvider<TypeBoxTypeProvider>();
 
+  const parseJson = app.getDefaultJsonParser('error', 'error');
+  app.addContentTypeParser('application/json', { parseAs: 'string' }, (request, body, done) => {
+    if (body === '') {
+      done(null, {});
+      return;
+    }
+    parseJson(request, String(body), done);
+  });
+
   app.get('/health', { schema: { response: { 200: HealthResponse } } }, async () => ({
     status: 'ok' as const,
     sha: deps.sha,
