@@ -10,7 +10,7 @@
     "packages/*"
   ],
   "scripts": {
-    "lint": "turbo run lint",
+    "lint": "prettier --check . && turbo run lint",
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
     "build": "turbo run build",
