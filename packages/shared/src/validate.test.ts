@@ -151,7 +151,10 @@ describe('validateDefinition on the brief example', () => {
 
 describe('validateDefinition triggers', () => {
   it('requires a trigger', () => {
-    const definition: Definition = { trigger: { onRepeatWhileWaiting: 'supersede' }, steps: [] };
+    const definition: Definition = {
+      trigger: { onRepeatWhileWaiting: 'supersede' },
+      steps: [{ kind: 'send_message', text: 'Hi!', buttons: [] }],
+    };
     expect(validateDefinition(definition, capabilities.instagram)).toEqual([
       {
         path: 'trigger',
@@ -167,14 +170,14 @@ describe('validateDefinition triggers', () => {
         comments: { posts: { kind: 'any' }, keywords: [] },
         onRepeatWhileWaiting: 'ignore',
       },
-      steps: [],
+      steps: [{ kind: 'reply_to_comment', text: 'Sent you a DM!' }],
     };
     const specificPost: Definition = {
       trigger: {
         comments: { posts: { kind: 'specific', postId: postId('post_1') }, keywords: [] },
         onRepeatWhileWaiting: 'ignore',
       },
-      steps: [],
+      steps: [{ kind: 'reply_to_comment', text: 'Sent you a DM!' }],
     };
     expect(codes(validateDefinition(anyPost, capabilities.facebook))).toEqual([
       { path: 'trigger.comments.keywords', code: 'KEYWORDS_REQUIRED' },
@@ -185,11 +188,28 @@ describe('validateDefinition triggers', () => {
   it('allows a messages trigger with no keywords where a conversation window exists', () => {
     const definition: Definition = {
       trigger: { messages: { keywords: [] }, onRepeatWhileWaiting: 'supersede' },
-      steps: [],
+      steps: [{ kind: 'send_message', text: 'Hi!', buttons: [] }],
     };
     expect(validateDefinition(definition, capabilities.whatsapp)).toEqual([]);
     expect(codes(validateDefinition(definition, capabilities.youtube))).toEqual([
       { path: 'trigger.messages', code: 'TRIGGER_NOT_SUPPORTED' },
+      { path: 'steps.0.kind', code: 'STEP_NOT_SUPPORTED' },
+    ]);
+  });
+});
+
+describe('validateDefinition steps', () => {
+  it('rejects a definition with no steps, which would complete a run that sends nothing', () => {
+    expect(validateDefinition(withSteps([]), capabilities.instagram)).toEqual([
+      { path: 'steps', code: 'STEPS_REQUIRED', message: 'Add at least one step' },
+    ]);
+  });
+
+  it('reports the missing steps alongside a missing trigger', () => {
+    const definition: Definition = { trigger: { onRepeatWhileWaiting: 'supersede' }, steps: [] };
+    expect(codes(validateDefinition(definition, capabilities.whatsapp))).toEqual([
+      { path: 'trigger', code: 'TRIGGER_REQUIRED' },
+      { path: 'steps', code: 'STEPS_REQUIRED' },
     ]);
   });
 });
@@ -315,6 +335,30 @@ describe('validateDefinition reply_to_comment', () => {
     ]);
     expect(validateDefinition(withSteps([reply]), capabilities.bluesky)).toEqual([]);
   });
+
+  it('counts {{contact.handle}} as the longest handle the platform plans for, 64 on Bluesky', () => {
+    const reply = (prefix: string): Step => ({
+      kind: 'reply_to_comment',
+      text: `${prefix}{{contact.handle}}`,
+    });
+    expect(validateDefinition(withSteps([reply('a'.repeat(237))]), capabilities.bluesky)).toEqual([
+      {
+        path: 'steps.0.text',
+        code: 'TEXT_TOO_LONG',
+        message:
+          'Text may be 301 characters once filled in, the limit is 300; {{contact.handle}} is counted as 64 characters, the longest handle on Bluesky',
+      },
+    ]);
+    expect(validateDefinition(withSteps([reply('a'.repeat(236))]), capabilities.bluesky)).toEqual(
+      [],
+    );
+    expect(
+      codes(validateDefinition(withSteps([reply('a'.repeat(970))]), capabilities.instagram)),
+    ).toEqual([{ path: 'steps.0.text', code: 'TEXT_TOO_LONG' }]);
+    expect(validateDefinition(withSteps([reply('a'.repeat(969))]), capabilities.instagram)).toEqual(
+      [],
+    );
+  });
 });
 
 describe('validateDefinition wait_for_reply', () => {
@@ -432,6 +476,41 @@ describe('validateDefinition wait_for_reply', () => {
     ).toEqual([{ path: 'steps.1.reminder.afterHours', code: 'REMINDER_DELAY_INVALID' }]);
     expect(
       validateDefinition(withSteps([message, fine], messagesTrigger), capabilities.whatsapp),
+    ).toEqual([]);
+  });
+
+  it('on TikTok counts the reminder as one more message toward the cap of ten in a row', () => {
+    const withReminderText: Step = {
+      kind: 'wait_for_reply',
+      expect: 'email',
+      giveUpHours: 72,
+      reminder: { afterHours: 12, text: 'Still there?' },
+    };
+    const ten = Array.from({ length: 10 }, () => message);
+    expect(
+      validateDefinition(
+        withSteps([...ten, withReminderText], messagesTrigger),
+        capabilities.tiktok,
+      ),
+    ).toEqual([
+      {
+        path: 'steps.10.reminder',
+        code: 'REMINDER_NOT_ALLOWED_BY_CAP',
+        message:
+          'TikTok allows at most 10 messages in a row before the contact replies; the reminder would be one more',
+      },
+    ]);
+    expect(
+      validateDefinition(
+        withSteps([...ten.slice(0, 9), withReminderText], messagesTrigger),
+        capabilities.tiktok,
+      ),
+    ).toEqual([]);
+    expect(
+      validateDefinition(
+        withSteps([...ten, withReminderText], messagesTrigger),
+        capabilities.whatsapp,
+      ),
     ).toEqual([]);
   });
 
@@ -612,19 +691,21 @@ describe('validateDefinition template placeholders', () => {
     ).toEqual([]);
   });
 
-  it('measures length with the longest value each placeholder can take: handle 30, email 254', () => {
-    const handle = `${'a'.repeat(970)}{{contact.handle}}`;
+  it('measures length with the longest value each placeholder can take: handle 31 on Instagram, email 254', () => {
+    const handle = `${'a'.repeat(969)}{{contact.handle}}`;
     expect(validateDefinition(withSteps([message(handle)]), capabilities.instagram)).toEqual([]);
     expect(validateDefinition(withSteps([message(`${handle}a`)]), capabilities.instagram)).toEqual([
       {
         path: 'steps.0.text',
         code: 'TEXT_TOO_LONG',
-        message: 'Text may be 1001 characters once filled in, the limit is 1000',
+        message:
+          'Text may be 1001 characters once filled in, the limit is 1000; {{contact.handle}} is counted as 31 characters, the longest handle on Instagram',
       },
       {
         path: 'steps.0.text',
         code: 'TEXT_TOO_MANY_BYTES',
-        message: 'Text may be 1001 bytes in UTF-8 once filled in, the limit is 1000',
+        message:
+          'Text may be 1001 bytes in UTF-8 once filled in, the limit is 1000; {{contact.handle}} is counted as 31 characters, the longest handle on Instagram',
       },
     ]);
     const email = `${'a'.repeat(746)}{{email}}`;
@@ -678,7 +759,7 @@ describe('validateDefinition keywords', () => {
         messages: { keywords: ['', '🔥'] },
         onRepeatWhileWaiting: 'supersede',
       },
-      steps: [],
+      steps: [{ kind: 'reply_to_comment', text: 'Sent you a DM!' }],
     };
     expect(validateDefinition(definition, capabilities.instagram)).toEqual([
       unmatchable('trigger.comments.keywords.1'),
@@ -694,7 +775,7 @@ describe('validateDefinition keywords', () => {
         comments: { posts: { kind: 'any' }, keywords: ['café', '42', '价格', '❤️', 'price list'] },
         onRepeatWhileWaiting: 'supersede',
       },
-      steps: [],
+      steps: [{ kind: 'reply_to_comment', text: 'Sent you a DM!' }],
     };
     expect(validateDefinition(definition, capabilities.instagram)).toEqual([]);
   });

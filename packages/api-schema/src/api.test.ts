@@ -183,8 +183,20 @@ describe('product API schemas', () => {
     expect(Value.Check(schema.RunSummary, { ...run, status: 'done' })).toBe(false);
   });
 
-  it('rejects an empty automation name and a draft that is not a definition', () => {
+  it('rejects an empty, whitespace-only or overlong automation name and a draft that is not a definition', () => {
     expect(Value.Check(schema.CreateAutomationRequest, { ...createRequest, name: '' })).toBe(false);
+    expect(Value.Check(schema.CreateAutomationRequest, { ...createRequest, name: ' \t\n ' })).toBe(
+      false,
+    );
+    expect(
+      Value.Check(schema.CreateAutomationRequest, { ...createRequest, name: 'a'.repeat(121) }),
+    ).toBe(false);
+    expect(
+      Value.Check(schema.CreateAutomationRequest, {
+        ...createRequest,
+        name: ` ${'a'.repeat(119)}`,
+      }),
+    ).toBe(true);
     expect(Value.Check(schema.AutomationDetail, { ...detail, draft: { steps: [] } })).toBe(false);
   });
 });
