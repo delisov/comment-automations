@@ -19,6 +19,7 @@ const deps = {
   fetch,
   serviceToken: config.serviceToken,
   testMode: config.gatewayMode === 'test',
+  webhookAllowPrivate: config.webhookAllowPrivate,
   publicDir: path.resolve(import.meta.dirname, '../public'),
 };
 

@@ -3,7 +3,16 @@ import { canRemindBeforeReply } from '@comment-automations/shared';
 import type { Db, RunContext, RunError } from '../db/types.js';
 import { json } from '../db/types.js';
 import type { LoadedRun } from '../runs/store.js';
-import { enqueueJob, failRun, finishRun, loadRun, logRun, saveContext } from '../runs/store.js';
+import {
+  enqueueJob,
+  failRun,
+  finishRun,
+  inTransaction,
+  loadRun,
+  logMovedOn,
+  logRun,
+  saveContext,
+} from '../runs/store.js';
 import type { Deps, StepFailure } from './send.js';
 import { gatewayFailure, lastInboundOf, replyPublicly, sendToContact } from './send.js';
 import { hoursToMs } from './windows.js';
@@ -129,26 +138,36 @@ const waitForReply = async (
     step.reminder !== undefined && canRemindBeforeReply(loaded.record)
       ? new Date(now.getTime() + hoursToMs(step.reminder.afterHours))
       : null;
-  await db
-    .updateTable('runs')
-    .set({
-      status: 'waiting',
-      wait_until: waitUntil,
-      reminder_at: reminderAt,
-      reminder_sent: false,
-      nudged: false,
-      updated_at: now,
-    })
-    .where('id', '=', runId)
-    .execute();
-  await enqueueJob(db, 'give_up', runId, waitUntil);
-  if (reminderAt !== null) {
-    await enqueueJob(db, 'reminder', runId, reminderAt);
-  }
-  await logRun(db, runId, now, {
-    stepIndex: loaded.run.step_index,
-    message: `Waiting for a reply · gives up at ${waitUntil.toISOString()}`,
-    context: { waitUntil: waitUntil.toISOString(), reminderAt: reminderAt?.toISOString() ?? null },
+  await inTransaction(db, async (trx) => {
+    const result = await trx
+      .updateTable('runs')
+      .set({
+        status: 'waiting',
+        wait_until: waitUntil,
+        reminder_at: reminderAt,
+        reminder_sent: false,
+        nudged: false,
+        updated_at: now,
+      })
+      .where('id', '=', runId)
+      .where('status', '=', 'running')
+      .executeTakeFirst();
+    if (result.numUpdatedRows === 0n) {
+      await logMovedOn(trx, runId, now, loaded.run.step_index, 'waiting');
+      return;
+    }
+    await enqueueJob(trx, 'give_up', runId, waitUntil);
+    if (reminderAt !== null) {
+      await enqueueJob(trx, 'reminder', runId, reminderAt);
+    }
+    await logRun(trx, runId, now, {
+      stepIndex: loaded.run.step_index,
+      message: `Waiting for a reply · gives up at ${waitUntil.toISOString()}`,
+      context: {
+        waitUntil: waitUntil.toISOString(),
+        reminderAt: reminderAt?.toISOString() ?? null,
+      },
+    });
   });
   return { kind: 'wait' };
 };
@@ -174,19 +193,35 @@ export const advance = async (deps: Deps, runId: RunId): Promise<JobOutcome> => 
     }
     const step = loaded.definition.steps[loaded.run.step_index];
     if (step === undefined) {
-      await finishRun(deps.db, runId, 'completed', deps.clock.now(), {
-        stepIndex: null,
-        message: 'Completed',
-      });
+      await finishRun(
+        deps.db,
+        runId,
+        'completed',
+        deps.clock.now(),
+        { stepIndex: null, message: 'Completed' },
+        null,
+        ['running'],
+      );
       return { kind: 'done' };
     }
     const outcome = await executeStep(deps, deps.db, loaded, step);
     switch (outcome.kind) {
-      case 'next':
-        await saveContext(deps.db, runId, outcome.context ?? loaded.run.context, deps.clock.now(), {
-          step_index: loaded.run.step_index + 1,
-        });
+      case 'next': {
+        const now = deps.clock.now();
+        const saved = await saveContext(
+          deps.db,
+          runId,
+          outcome.context ?? loaded.run.context,
+          now,
+          'running',
+          { step_index: loaded.run.step_index + 1 },
+        );
+        if (!saved) {
+          await logMovedOn(deps.db, runId, now, loaded.run.step_index, 'next step');
+          return { kind: 'done' };
+        }
         break;
+      }
       case 'wait':
         return { kind: 'done' };
       case 'fail':
@@ -215,6 +250,7 @@ export const resumeFromWait = async (
       updated_at: now,
     })
     .where('id', '=', loaded.run.id)
+    .where('status', '=', 'waiting')
     .execute();
   await db
     .updateTable('jobs')

@@ -24,7 +24,17 @@ export const TOKEN = 'test-service-token';
 
 export const START = new Date('2026-10-04T10:00:00.000Z');
 
-export const withDatabase = describe.skipIf(process.env.DATABASE_URL === undefined);
+const databaseUrl = process.env.DATABASE_URL;
+
+if (databaseUrl === undefined && process.env.CI !== undefined) {
+  throw new Error('DATABASE_URL is required to run *.int.test.ts in CI');
+}
+
+if (databaseUrl === undefined) {
+  console.warn('DATABASE_URL is not set: skipping the tests that need a database');
+}
+
+export const withDatabase = describe.skipIf(databaseUrl === undefined);
 
 export type WebhookCall = {
   url: string;
@@ -57,7 +67,7 @@ export type Harness = {
 };
 
 export const createHarness = async (): Promise<Harness> => {
-  const db = createDb(process.env.DATABASE_URL ?? '');
+  const db = createDb(databaseUrl ?? '');
   await migrateToLatest(db);
   const clock = controlledClock(START);
   const gateway = fakeGateway();
@@ -80,6 +90,7 @@ export const createHarness = async (): Promise<Harness> => {
     fetch: fetchFn,
     serviceToken: TOKEN,
     testMode: true,
+    webhookAllowPrivate: true,
     publicDir: 'does-not-exist',
   };
   const app = buildApp(deps);
@@ -100,7 +111,14 @@ export const createHarness = async (): Promise<Harness> => {
     webhookCalls,
     webhookStatus,
     reset: async () => {
-      expectStatus(await app.inject({ method: 'POST', url: '/test/reset' }), 200);
+      expectStatus(
+        await app.inject({
+          method: 'POST',
+          url: '/test/reset',
+          headers: { 'x-service-token': TOKEN },
+        }),
+        200,
+      );
       clock.set(START);
       gateway.calls.length = 0;
       webhookCalls.length = 0;

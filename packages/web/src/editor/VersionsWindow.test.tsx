@@ -1,3 +1,4 @@
+import type { DefinitionSchema } from '@comment-automations/api-schema';
 import { versionId } from '@comment-automations/shared';
 import { cleanup, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -6,12 +7,21 @@ import { VersionsWindow, versionState } from './VersionsWindow.js';
 
 afterEach(cleanup);
 
+const definition: DefinitionSchema = {
+  trigger: {
+    comments: { posts: { kind: 'any' }, keywords: ['pricing'] },
+    onRepeatWhileWaiting: 'supersede',
+  },
+  steps: [{ kind: 'reply_to_comment', text: 'Sent you a DM!' }],
+};
+
 const version = (number: number, isActive: boolean): Version => ({
   id: versionId(`v_${number}`),
   number,
   note: `Change ${number}`,
   publishedAt: `2026-10-0${number}T10:00:00Z`,
   isActive,
+  definition,
 });
 
 const versions = [version(1, false), version(2, false), version(3, true), version(4, false)];

@@ -9,6 +9,3 @@ export const createDb = (databaseUrl: string): Kysely<Database> =>
     dialect: new PostgresDialect({ pool: new pg.Pool({ connectionString: databaseUrl }) }),
     plugins: [new WithSchemaPlugin(SCHEMA)],
   });
-
-export const isUniqueViolation = (error: unknown): boolean =>
-  typeof error === 'object' && error !== null && (error as { code?: string }).code === '23505';
