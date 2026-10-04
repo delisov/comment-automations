@@ -1,0 +1,32 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "agentGuidance": false,
+  "tasks": {
+    "build": {
+      "dependsOn": ["^build"],
+      "outputs": ["dist/**"]
+    },
+    "lint": {},
+    "typecheck": {},
+    "test": {
+      "dependsOn": ["^build"]
+    },
+    "dev": {
+      "dependsOn": ["^build"],
+      "cache": false,
+      "persistent": true
+    }
+  },
+  "globalPassThroughEnv": [
+    "DATABASE_URL",
+    "PORT",
+    "HOST",
+    "GIT_SHA",
+    "SERVICE_TOKEN",
+    "SERVICE_URL",
+    "GATEWAY_MODE",
+    "GATEWAY_URL",
+    "CLOCK_MODE",
+    "WORKER_POLL_MS"
+  ]
+}
