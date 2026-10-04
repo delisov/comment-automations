@@ -56,7 +56,7 @@ steps:   reply_to_comment | send_message | wait_for_reply | call_webhook
 
 Steps are a sequence, not a graph. The five kinds cover the brief and the realistic extension to a CRM hand-off. Branching, loops and arbitrary conditions were considered and rejected: they turn a constructor into a workflow engine, and every network's rules then have to be enforced over a graph. The one place where a choice is needed, what to do when a recipient cannot receive messages on a class B network, is a property of the message step.
 
-`wait_for_reply` handles two situations separately: no reply at all (an optional reminder after a delay, where the network allows a second message before the first reply, then give up) and a reply without the expected content (ask once more with its own text, then keep waiting or end).
+`wait_for_reply` handles two situations separately: no reply at all (an optional reminder after a delay, where the network allows a second message before the first reply, then give up) and a reply without the expected content (ask once more with its own text, then keep waiting or end). A reply with the expected content moves the run to the next step; the editor says so at the bottom of the wait and above the message that follows it.
 
 Publishing creates an immutable version. Making an earlier version active keeps the later ones; editing the active version and publishing creates the next number. Runs record the version they started on and finish on it. Analytics compare versions, including reply rate, so a creator can tell which wording works.
 
