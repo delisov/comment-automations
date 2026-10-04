@@ -385,3 +385,12 @@ Format:
 - Why: The whole loop must be demonstrable by the human without help.
 - Affects: run plan, packages/web, packages/stand, packages/stand-web, compose stack
 - Status: active
+
+## HD-042  A dropped event is a failed delivery attempt that the network retries
+- When: 2026-10-04T17:15+03:00
+- Who: Dmitriy Elisov
+- Where: Claude Code session
+- Decision: "Dropped" does not mean the event is lost for good. It means one delivery attempt failed at the network level, so the social network never received our 200, and the network retries, as Meta's webhooks do (immediately, then with decreasing frequency, up to about 36 hours).
+- Why: We can do nothing about an event that never entered our system, so there is nothing to test.
+- Affects: packages/stand delivery, packages/stand-web event log, tags and settings, docs/test-stand.md
+- Status: active

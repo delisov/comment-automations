@@ -1,9 +1,14 @@
 import type { Delivery, LogEntry } from '../api.js';
+import { deliveryLogLine } from './annotate.js';
 
 type Props = { log: LogEntry[]; deliveries: Delivery[] };
 
 const summarize = (entry: LogEntry): string => {
   const payload = entry.payload;
+  const deliveryLine = deliveryLogLine(entry);
+  if (deliveryLine !== null) {
+    return `${entry.kind} ${String(payload.eventId)}: ${deliveryLine}`;
+  }
   if (entry.direction === 'to_service') {
     const text = typeof payload.text === 'string' ? payload.text : '';
     const author =
@@ -27,7 +32,7 @@ const tone = (entry: LogEntry): string => {
   if (entry.result_code === null || entry.result_code === 'OK') {
     return 'ok';
   }
-  if (entry.result_code === 'DUPLICATED' || entry.result_code === 'DROPPED') {
+  if (entry.result_code === 'DUPLICATED' || entry.result_code === 'NETWORK_DROP') {
     return '';
   }
   return 'refused';

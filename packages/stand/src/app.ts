@@ -6,7 +6,7 @@ import type { TypeBoxTypeProvider } from '@fastify/type-provider-typebox';
 import Fastify from 'fastify';
 import type { Context } from './context.js';
 import type { Db } from './db/database.js';
-import { createDelivery } from './delivery.js';
+import { createDelivery, RETRY_DELAYS_MS } from './delivery.js';
 import { clockRoutes } from './routes/clock.js';
 import { gatewayRoutes } from './routes/gateway.js';
 import { scenarioRoutes } from './routes/scenario.js';
@@ -18,6 +18,7 @@ export type AppDeps = {
   serviceUrl: string;
   serviceToken: string;
   retryDelaysMs?: number[];
+  random?: () => number;
   publicDir?: string;
 };
 
@@ -30,8 +31,8 @@ export const buildApp = (deps: AppDeps) => {
     clock: deps.clock,
     serviceUrl: deps.serviceUrl,
     serviceToken: deps.serviceToken,
-    retryDelaysMs: deps.retryDelaysMs ?? [1000, 5000, 25000],
-    random: Math.random,
+    retryDelaysMs: deps.retryDelaysMs ?? RETRY_DELAYS_MS,
+    random: deps.random ?? Math.random,
   });
   const ctx: Context = {
     db: deps.db,

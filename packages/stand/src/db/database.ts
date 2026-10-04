@@ -80,7 +80,7 @@ export type DeliveriesTable = {
   id: Generated<number>;
   event_id: EventId;
   attempt: number;
-  status: 'delivered' | 'failed' | 'dropped';
+  status: 'delivered' | 'failed';
   at: Date;
 };
 
