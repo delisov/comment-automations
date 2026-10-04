@@ -5,7 +5,7 @@ export default defineConfig(
   globalIgnores(['**/dist/**', '**/node_modules/**', '**/.turbo/**']),
   tseslint.configs.recommended,
   {
-    files: ['**/*.ts'],
+    files: ['**/*.ts', '**/*.tsx'],
     rules: {
       '@typescript-eslint/consistent-type-imports': 'error',
       '@typescript-eslint/consistent-type-definitions': ['error', 'type'],
