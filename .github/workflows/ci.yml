@@ -42,4 +42,4 @@ jobs:
       - run: docker run -d --name api -p 3000:3000 comment-automations-api
       - run: |
           for i in $(seq 1 20); do curl -sf localhost:3000/health && break; sleep 1; done
-          test "$(curl -sf localhost:3000/health | sed -E 's/.*"sha":"([^"]+)".*//')" = "${{ github.sha }}"
+          curl -sf localhost:3000/health | grep -q "\"sha\":\"${{ github.sha }}\""
