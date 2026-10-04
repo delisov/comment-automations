@@ -1,0 +1,20 @@
+{
+  "name": "@comment-automations/test-cycles",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "seed": "tsx src/seed.ts",
+    "cycles": "tsx src/cycles.ts"
+  },
+  "dependencies": {
+    "@comment-automations/api-schema": "*",
+    "@comment-automations/shared": "*"
+  },
+  "devDependencies": {
+    "tsx": "^4.23.15"
+  }
+}

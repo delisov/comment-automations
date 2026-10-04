@@ -50,3 +50,23 @@ jobs:
       - run: |
           for i in $(seq 1 20); do curl -sf localhost:3000/health && break; sleep 1; done
           curl -sf localhost:3000/health | grep -q "\"sha\":\"${{ github.sha }}\""
+
+  stack:
+    runs-on: ubuntu-latest
+    needs: ci
+    env:
+      GIT_SHA: ${{ github.sha }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: docker compose up --build --wait --wait-timeout 300
+      - run: curl -sf localhost:3000/health | grep -q "\"sha\":\"${{ github.sha }}\""
+      - run: curl -sf localhost:3100/health | grep -q "\"sha\":\"${{ github.sha }}\""
+      - run: npm run seed
+      - run: npm run cycles
+      - if: failure()
+        run: docker compose logs api stand

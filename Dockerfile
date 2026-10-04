@@ -5,9 +5,10 @@ COPY packages/shared/package.json packages/shared/
 COPY packages/gateway-contract/package.json packages/gateway-contract/
 COPY packages/api-schema/package.json packages/api-schema/
 COPY packages/api/package.json packages/api/
+COPY packages/web/package.json packages/web/
 RUN npm ci
 COPY packages packages
-RUN npm run build
+RUN npx turbo run build --filter=@comment-automations/api --filter=@comment-automations/web
 
 FROM node:22-alpine
 ARG GIT_SHA=dev
@@ -24,6 +25,7 @@ COPY --from=build /app/packages/shared/dist packages/shared/dist
 COPY --from=build /app/packages/gateway-contract/dist packages/gateway-contract/dist
 COPY --from=build /app/packages/api-schema/dist packages/api-schema/dist
 COPY --from=build /app/packages/api/dist packages/api/dist
+COPY --from=build /app/packages/api/public packages/api/public
 USER node
 EXPOSE 3000
 CMD ["node", "packages/api/dist/server.js"]

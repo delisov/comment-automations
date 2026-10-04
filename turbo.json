@@ -15,9 +15,22 @@
       "dependsOn": ["^build"],
       "cache": false,
       "persistent": true
+    },
+    "seed": {
+      "dependsOn": ["^build"],
+      "cache": false
+    },
+    "cycles": {
+      "dependsOn": ["^build"],
+      "cache": false
     }
   },
   "globalPassThroughEnv": [
+    "API_URL",
+    "STAND_URL",
+    "WEBHOOK_HOST",
+    "WEBHOOK_PORT",
+    "CYCLES",
     "DATABASE_URL",
     "PORT",
     "HOST",
