@@ -1,21 +1,26 @@
 import type { AutomationDetail } from '@comment-automations/api-schema';
+import type { AccountId } from '@comment-automations/shared';
 import { useState } from 'react';
 import type { Account } from '../api/client.js';
 import { api } from '../api/client.js';
-import { capabilitiesFor, supportsAutomations } from '../capabilities.js';
+import { capabilitiesFor, supportsAutomations, unsupportedReason } from '../capabilities.js';
 import { Button, Callout, Modal, PlatformBadge, platformLabel } from '../ui.js';
 
 export const NewAutomationModal = ({
   accounts,
+  initialAccountId,
   onClose,
   onCreated,
 }: {
   accounts: Account[];
+  initialAccountId?: AccountId;
   onClose: () => void;
   onCreated: (automation: AutomationDetail) => void;
 }) => {
   const [open, setOpen] = useState(false);
-  const [account, setAccount] = useState<Account | null>(null);
+  const [account, setAccount] = useState<Account | null>(
+    accounts.find((item) => item.id === initialAccountId) ?? null,
+  );
   const [name, setName] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -107,11 +112,7 @@ export const NewAutomationModal = ({
                   }}
                 >
                   <PlatformBadge platform={item.platform} text={item.handle} />
-                  <small>
-                    {usable
-                      ? platformLabel(item.platform)
-                      : `No comment or message automations on ${platformLabel(item.platform)}`}
-                  </small>
+                  <small>{usable ? platformLabel(item.platform) : unsupportedReason(item)}</small>
                 </div>
               );
             })}
