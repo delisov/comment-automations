@@ -154,7 +154,8 @@ export const WorldPanel = ({
         {knob('duplicatePercent', 'Duplicate %')}
         {knob('reorderWindowMs', 'Reorder window ms')}
         {knob('delayMs', 'Delay ms')}
-        {knob('dropPercent', 'Drop %')}
+        {knob('dropPercent', 'Network failures per attempt (%)')}
+        <div className="muted hint">The network retries, as Instagram does.</div>
         {knob('burst429', 'Next N gateway calls 429')}
       </div>
     </>

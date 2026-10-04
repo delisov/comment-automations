@@ -186,7 +186,7 @@ event_log                   id, direction ('in'|'out'), kind, payload jsonb, res
 deliveries                  id, event_id, attempt, status, at
 idempotency                 account_id, key, response jsonb
 ```
-Each platform world is a module with `rules`: whether private replies exist and for how long, conversation window, dm setting checks, limits, echo. A violation returns the gateway error code a real platform would (AD-012). Delivery knobs: duplicate %, reorder window, delay, drop %, burst (429).
+Each platform world is a module with `rules`: whether private replies exist and for how long, conversation window, dm setting checks, limits, echo. A violation returns the gateway error code a real platform would (AD-012). Delivery knobs: duplicate %, reorder window, delay, drop %, burst (429). Drop % is the chance that one delivery attempt fails at the network level; the failed attempt is retried after 1 s, 5 s, 15 s, 30 s, 60 s and every 120 s after that, and the event is given up only after 20 attempts or 36 hours of stand time (HD-042).
 
 Scenario API (portal and cycles): create account/user/post, act as user (comment, reply, message, change dm setting, follow), reset world, read everything.
 
