@@ -8,10 +8,13 @@ const IngestBody = Type.Object({
   events: Type.Array(InboundEvent, { minItems: 1, maxItems: 500 }),
 });
 
+const BODY_LIMIT = 256 * 1024;
+
 export const registerIngestRoutes = (app: App, deps: AppDeps): void => {
   app.post(
     '/ingest/events',
     {
+      bodyLimit: BODY_LIMIT,
       preValidation: requireServiceToken(deps),
       schema: { body: IngestBody, response: { 202: IngestResponse, 401: ErrorResponse } },
     },
