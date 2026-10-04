@@ -83,8 +83,7 @@ export const App = () => {
         standNow={standNow}
         onClock={(next) => act(() => api.setClock(next))}
         onShift={(ms) => act(() => shiftClock(api, ms))}
-        onReset={() => act(api.reset)}
-        onSeed={() => act(api.seed)}
+        onRestore={() => act(api.restore)}
       />
       <div className="banner">
         <span>Emulating {user ? `${user.handle} (${user.display_name})` : 'nobody'}</span>
