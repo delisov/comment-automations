@@ -98,6 +98,31 @@ const PostPicker = ({
   );
 };
 
+type TriggerControl = {
+  kind: keyof CapabilitiesResponse['allowedTriggers'];
+  label: string;
+  toggled: Trigger;
+};
+
+const triggerControls = (trigger: Trigger, keywords: string[]): TriggerControl[] => [
+  {
+    kind: 'comments',
+    label: 'comments',
+    toggled: {
+      ...trigger,
+      comments: trigger.comments === undefined ? { posts: { kind: 'any' }, keywords } : undefined,
+    },
+  },
+  {
+    kind: 'messages',
+    label: 'sends a message',
+    toggled: {
+      ...trigger,
+      messages: trigger.messages === undefined ? { keywords } : undefined,
+    },
+  },
+];
+
 const keywordsLabel = (trigger: Trigger): string => {
   if (trigger.comments !== undefined && trigger.messages !== undefined) {
     return 'And the comment or message contains';
@@ -152,33 +177,17 @@ export const TriggerCard = ({
     <div className="card">
       <h3>When someone…</h3>
       <div className="row" style={{ gap: 18, marginBottom: 14, flexWrap: 'wrap' }}>
-        {caps.allowedTriggers.comments ? (
-          <Check
-            on={trigger.comments !== undefined}
-            label="comments"
-            readOnly={readOnly}
-            onToggle={() =>
-              onChange({
-                ...trigger,
-                comments:
-                  trigger.comments === undefined ? { posts: { kind: 'any' }, keywords } : undefined,
-              })
-            }
-          />
-        ) : null}
-        {caps.allowedTriggers.messages ? (
-          <Check
-            on={trigger.messages !== undefined}
-            label="sends a message"
-            readOnly={readOnly}
-            onToggle={() =>
-              onChange({
-                ...trigger,
-                messages: trigger.messages === undefined ? { keywords } : undefined,
-              })
-            }
-          />
-        ) : null}
+        {triggerControls(trigger, keywords)
+          .filter((control) => caps.allowedTriggers[control.kind])
+          .map((control) => (
+            <Check
+              key={control.kind}
+              on={trigger[control.kind] !== undefined}
+              label={control.label}
+              readOnly={readOnly}
+              onToggle={() => onChange(control.toggled)}
+            />
+          ))}
       </div>
       {posts !== undefined ? (
         <div className="field">
