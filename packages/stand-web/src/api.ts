@@ -89,7 +89,7 @@ export type Delivery = {
   id: number;
   event_id: string;
   attempt: number;
-  status: 'delivered' | 'failed' | 'dropped';
+  status: 'delivered' | 'failed';
   at: string;
 };
 

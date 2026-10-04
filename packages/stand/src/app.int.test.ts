@@ -34,6 +34,9 @@ describe.skipIf(!databaseUrl)('stand against a real database', () => {
   let stub: http.Server;
   let clock: ControlledClock;
   const received: Received[] = [];
+  const answers: unknown[] = [];
+  const ingested = new Set<string>();
+  let serviceErrors = 0;
   let serviceNow = t0;
 
   const gateway = (method: 'GET' | 'POST', url: string, body?: unknown) =>
@@ -65,13 +68,32 @@ describe.skipIf(!databaseUrl)('stand against a real database', () => {
         body += chunk;
       });
       request.on('end', () => {
+        const parsed = JSON.parse(body) as { events?: { eventId: string }[] };
         received.push({
           url: request.url,
           token: request.headers['x-service-token'],
-          body: JSON.parse(body),
+          body: parsed,
         });
+        if (request.url === '/ingest/events' && serviceErrors > 0) {
+          serviceErrors -= 1;
+          response.writeHead(500, { 'content-type': 'application/json' });
+          response.end(JSON.stringify({ code: 'INTERNAL', message: 'boom' }));
+          return;
+        }
+        if (request.url !== '/ingest/events') {
+          response.writeHead(202, { 'content-type': 'application/json' });
+          response.end(JSON.stringify({ accepted: 1, duplicates: 0 }));
+          return;
+        }
+        const events = parsed.events ?? [];
+        const fresh = events.filter((event) => !ingested.has(event.eventId));
+        for (const event of fresh) {
+          ingested.add(event.eventId);
+        }
+        const answer = { accepted: fresh.length, duplicates: events.length - fresh.length };
+        answers.push(answer);
         response.writeHead(202, { 'content-type': 'application/json' });
-        response.end(JSON.stringify({ accepted: 1, duplicates: 0 }));
+        response.end(JSON.stringify(answer));
       });
     });
     await new Promise<void>((resolve) => stub.listen(0, '127.0.0.1', resolve));
@@ -92,6 +114,8 @@ describe.skipIf(!databaseUrl)('stand against a real database', () => {
     vi.setSystemTime(t0);
     clock.set(t0);
     received.length = 0;
+    answers.length = 0;
+    serviceErrors = 0;
     serviceNow = t0;
     await scenario('PUT', '/scenario/settings', {
       burst429: 0,
@@ -556,5 +580,175 @@ describe.skipIf(!databaseUrl)('stand against a real database', () => {
     } finally {
       await unreachable.close();
     }
+  });
+
+  describe('network failures per attempt', () => {
+    const ingests = () => received.filter((entry) => entry.url === '/ingest/events');
+
+    const withDropApp = async (
+      options: { retryDelaysMs: number[]; random: () => number },
+      run: (drop: FastifyInstance) => Promise<void>,
+    ) => {
+      const { port } = stub.address() as AddressInfo;
+      const drop = buildApp({
+        db,
+        clock,
+        sha: 'test-sha',
+        serviceUrl: `http://127.0.0.1:${port}`,
+        serviceToken: token,
+        ...options,
+      });
+      await drop.ready();
+      try {
+        await run(drop);
+      } finally {
+        await drop.close();
+      }
+    };
+
+    const commentThrough = async (drop: FastifyInstance) =>
+      (
+        await drop.inject({
+          method: 'POST',
+          url: '/scenario/comments',
+          payload: { postId: 'instagram_post_1', userId: 'instagram_jane.doe', text: 'pricing?' },
+        })
+      ).json<{ id: string }>();
+
+    const attemptsOf = async (eventId: string) =>
+      (await deliveries())
+        .map((row) => row as { event_id: string; attempt: number; status: string })
+        .filter((row) => row.event_id === eventId)
+        .map((row) => [row.attempt, row.status])
+        .reverse();
+
+    const deliveryLog = async (eventId: string) =>
+      (await scenario('GET', '/scenario/event-log'))
+        .json<{ result_code: string | null; payload: Record<string, unknown> }[]>()
+        .filter(
+          (entry) =>
+            entry.payload.eventId === eventId &&
+            ['NETWORK_DROP', 'SERVICE_ERROR', 'GAVE_UP'].includes(entry.result_code ?? ''),
+        )
+        .map((entry) => [entry.result_code, entry.payload])
+        .reverse();
+
+    const gaveUp = async (eventId: string) =>
+      (await deliveryLog(eventId)).some(([code]) => code === 'GAVE_UP');
+
+    it('retries a request lost on the way in and the service sees the event once', async () => {
+      await scenario('PUT', '/scenario/settings', { dropPercent: 100 });
+      await withDropApp({ retryDelaysMs: [400], random: () => 0.1 }, async (drop) => {
+        const comment = await commentThrough(drop);
+        const eventId = `evt_${comment.id}`;
+        await waitFor(async () => (await attemptsOf(eventId)).length === 1);
+        await scenario('PUT', '/scenario/settings', { dropPercent: 0 });
+        await waitFor(async () => (await attemptsOf(eventId)).length === 2);
+
+        expect(await attemptsOf(eventId)).toEqual([
+          [1, 'failed'],
+          [2, 'delivered'],
+        ]);
+        expect(ingests().map((entry) => entry.body)).toEqual([
+          { events: [expect.objectContaining({ eventId })] },
+        ]);
+        expect(answers).toEqual([{ accepted: 1, duplicates: 0 }]);
+        expect(await deliveryLog(eventId)).toEqual([
+          ['NETWORK_DROP', { eventId, attempt: 1, shape: 'not received', retryInMs: 400 }],
+        ]);
+      });
+    });
+
+    it('retries after a lost response and the service counts the second copy as a duplicate', async () => {
+      await scenario('PUT', '/scenario/settings', { dropPercent: 100 });
+      await withDropApp({ retryDelaysMs: [400], random: () => 0.9 }, async (drop) => {
+        const comment = await commentThrough(drop);
+        const eventId = `evt_${comment.id}`;
+        await waitFor(async () => (await attemptsOf(eventId)).length === 1);
+        await scenario('PUT', '/scenario/settings', { dropPercent: 0 });
+        await waitFor(async () => (await attemptsOf(eventId)).length === 2);
+
+        expect(await attemptsOf(eventId)).toEqual([
+          [1, 'failed'],
+          [2, 'delivered'],
+        ]);
+        expect(ingests().map((entry) => entry.body)).toEqual([
+          { events: [expect.objectContaining({ eventId })] },
+          { events: [expect.objectContaining({ eventId })] },
+        ]);
+        expect(answers).toEqual([
+          { accepted: 1, duplicates: 0 },
+          { accepted: 0, duplicates: 1 },
+        ]);
+        expect(await deliveryLog(eventId)).toEqual([
+          ['NETWORK_DROP', { eventId, attempt: 1, shape: 'response lost', retryInMs: 400 }],
+        ]);
+      });
+    });
+
+    it('gives up after twenty failed attempts and never marks the event dropped', async () => {
+      await scenario('PUT', '/scenario/settings', { dropPercent: 100 });
+      await withDropApp({ retryDelaysMs: [1, 2], random: () => 0.1 }, async (drop) => {
+        const comment = await commentThrough(drop);
+        const eventId = `evt_${comment.id}`;
+        await waitFor(() => gaveUp(eventId));
+
+        expect(await attemptsOf(eventId)).toEqual(
+          Array.from({ length: 20 }, (_, index) => [index + 1, 'failed']),
+        );
+        expect(await deliveryLog(eventId)).toEqual([
+          ...Array.from({ length: 20 }, (_, index) => [
+            'NETWORK_DROP',
+            {
+              eventId,
+              attempt: index + 1,
+              shape: 'not received',
+              retryInMs: index === 0 ? 1 : index === 19 ? null : 2,
+            },
+          ]),
+          ['GAVE_UP', { eventId, attempts: 20 }],
+        ]);
+        expect(ingests()).toEqual([]);
+        const codes = (await scenario('GET', '/scenario/event-log'))
+          .json<{ result_code: string | null }[]>()
+          .map((entry) => entry.result_code);
+        expect(codes).not.toContain('DROPPED');
+      });
+    });
+
+    it('logs a 500 from the service as a service error, not a network drop, and retries', async () => {
+      serviceErrors = 1;
+      await withDropApp({ retryDelaysMs: [50], random: () => 0.1 }, async (drop) => {
+        const comment = await commentThrough(drop);
+        const eventId = `evt_${comment.id}`;
+        await waitFor(async () => (await attemptsOf(eventId)).length === 2);
+
+        expect(await attemptsOf(eventId)).toEqual([
+          [1, 'failed'],
+          [2, 'delivered'],
+        ]);
+        expect(await deliveryLog(eventId)).toEqual([
+          ['SERVICE_ERROR', { eventId, attempt: 1, status: 500, retryInMs: 50 }],
+        ]);
+        expect(answers).toEqual([{ accepted: 1, duplicates: 0 }]);
+      });
+    });
+
+    it('gives up once 36 hours of stand time have passed since the first attempt', async () => {
+      await scenario('PUT', '/scenario/settings', { dropPercent: 100 });
+      await withDropApp({ retryDelaysMs: [400], random: () => 0.1 }, async (drop) => {
+        const comment = await commentThrough(drop);
+        const eventId = `evt_${comment.id}`;
+        await waitFor(async () => (await attemptsOf(eventId)).length === 1);
+        clock.set(new Date(t0.getTime() + hours(36)));
+        await waitFor(() => gaveUp(eventId));
+
+        expect(await deliveryLog(eventId)).toEqual([
+          ['NETWORK_DROP', { eventId, attempt: 1, shape: 'not received', retryInMs: 400 }],
+          ['NETWORK_DROP', { eventId, attempt: 2, shape: 'not received', retryInMs: null }],
+          ['GAVE_UP', { eventId, attempts: 2 }],
+        ]);
+      });
+    });
   });
 });
