@@ -16,6 +16,7 @@ const STATUSES: RunStatus[] = [
   'failed',
   'expired',
   'superseded',
+  'stopped',
 ];
 
 export const RunsTab = ({

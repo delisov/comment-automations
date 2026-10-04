@@ -74,6 +74,7 @@ export const reminder = (deps: Deps, runId: RunId): Promise<JobOutcome> =>
     if (
       run.reminder_sent ||
       run.context.replied ||
+      (run.wait_until !== null && run.wait_until.getTime() <= deps.clock.now().getTime()) ||
       step?.kind !== 'wait_for_reply' ||
       step.reminder === undefined
     ) {
