@@ -189,6 +189,12 @@ describe('product API schemas', () => {
       false,
     );
     expect(
+      Value.Check(schema.CreateAutomationRequest, {
+        ...createRequest,
+        name: '​‌‍⁠﻿',
+      }),
+    ).toBe(false);
+    expect(
       Value.Check(schema.CreateAutomationRequest, { ...createRequest, name: 'a'.repeat(121) }),
     ).toBe(false);
     expect(

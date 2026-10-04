@@ -257,6 +257,28 @@ describe.skipIf(!databaseUrl)('stand against a real database', () => {
     ]);
   });
 
+  it('two simultaneous first messages from a new user share one conversation', async () => {
+    const fresh = (
+      await scenario('POST', '/scenario/users', { platform: 'instagram', handle: 'racer' })
+    ).json<{ id: string }>();
+    const send = (text: string) =>
+      scenario('POST', '/scenario/messages', {
+        accountId: 'instagram_oqtastore',
+        userId: fresh.id,
+        text,
+      });
+
+    const [first, second] = await Promise.all([send('one'), send('two')]);
+
+    expect([first.statusCode, second.statusCode]).toEqual([200, 200]);
+    const state = (await scenario('GET', '/scenario/state?platform=instagram')).json<{
+      conversations: { user_id: string; messages: { text: string }[] }[];
+    }>();
+    const mine = state.conversations.filter((conversation) => conversation.user_id === fresh.id);
+    expect(mine).toHaveLength(1);
+    expect(mine[0]!.messages.map((message) => message.text).sort()).toEqual(['one', 'two']);
+  });
+
   it('GET /test/clock returns the service clock reading and the stand reading unchanged when the service is ahead', async () => {
     serviceNow = new Date(t0.getTime() + hours(3));
     const response = await scenario('GET', '/test/clock');
