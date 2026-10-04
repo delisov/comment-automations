@@ -8,6 +8,7 @@ import { buildApp } from './app.js';
 import type { Db } from './db/database.js';
 import { createDb } from './db/database.js';
 import { migrate } from './db/migrate.js';
+import { platforms } from './worlds/index.js';
 
 const databaseUrl = process.env.DATABASE_URL;
 const token = 'test-token';
@@ -510,5 +511,50 @@ describe.skipIf(!databaseUrl)('stand against a real database', () => {
       expect.objectContaining({ id: comment.id, parent_id: null, author_user_id: 'instagram_bob' }),
       expect.objectContaining({ parent_id: comment.id, author_account_id: 'instagram_oqtastore' }),
     ]);
+  });
+
+  const worldState = async () =>
+    Promise.all(
+      platforms.map(async (platform) =>
+        (await scenario('GET', `/scenario/state?platform=${platform}`)).json(),
+      ),
+    );
+
+  it('POST /scenario/restore returns the seeded world and sets both clocks to now without resetting the service', async () => {
+    const seeded = await worldState();
+    const account = (
+      await scenario('POST', '/scenario/accounts', { platform: 'instagram', handle: '@extra' })
+    ).json<{ id: string }>();
+    await scenario('POST', '/scenario/posts', { accountId: account.id, caption: 'extra post' });
+    await scenario('POST', '/scenario/users', { platform: 'bluesky', handle: 'extra.user' });
+    clock.set(new Date(t0.getTime() + days(3)));
+    expect(await worldState()).not.toEqual(seeded);
+
+    const response = await scenario('POST', '/scenario/restore');
+
+    expect(response.json()).toEqual({ ok: true, service: { status: 202 } });
+    expect(await worldState()).toEqual(seeded);
+    expect(clock.now()).toEqual(t0);
+    expect(received).toEqual([{ url: '/test/clock', token, body: { now: t0.toISOString() } }]);
+  });
+
+  it('POST /scenario/restore still restores the world when the service is unreachable', async () => {
+    const seeded = await worldState();
+    await scenario('POST', '/scenario/accounts', { platform: 'x', handle: '@extra' });
+    const unreachable = buildApp({
+      db,
+      clock,
+      sha: 'test-sha',
+      serviceUrl: 'http://127.0.0.1:1',
+      serviceToken: token,
+      retryDelaysMs: [],
+    });
+    try {
+      const response = await unreachable.inject({ method: 'POST', url: '/scenario/restore' });
+      expect(response.json()).toEqual({ ok: true, service: { error: expect.any(String) } });
+      expect(await worldState()).toEqual(seeded);
+    } finally {
+      await unreachable.close();
+    }
   });
 });
