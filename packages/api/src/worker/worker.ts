@@ -1,31 +1,49 @@
 import type { Selectable } from 'kysely';
-import type { JobsTable } from '../db/types.js';
+import { sql } from 'kysely';
+import type { JobsTable, RunError } from '../db/types.js';
 import type { JobOutcome } from '../executor/advance.js';
 import { advance } from '../executor/advance.js';
 import type { Deps } from '../executor/send.js';
-import { giveUp, reminder } from '../executor/timers.js';
+import { giveUp, nudge, reminder } from '../executor/timers.js';
 import { failRun, loadRun, logRun } from '../runs/store.js';
 
 export const BACKOFF_MS: readonly number[] = [1_000, 5_000, 25_000, 120_000];
 
-const LOCK_MS = 60_000;
+export const LOCK_MS = 60_000;
+
+const RENEW_MS = 20_000;
+
+const MAX_ATTEMPTS = BACKOFF_MS.length + 1;
+
+const INTERRUPTED: RunError = {
+  code: 'INTERNAL',
+  message: 'The step was interrupted too many times',
+};
+
+const CRASHED: RunError = { code: 'INTERNAL', message: 'The step failed unexpectedly' };
+
+const EXHAUSTED_COURTESY = {
+  reminder: 'Reminder could not be sent',
+  nudge: 'Could not ask once more',
+} as const;
 
 const dispatch = (deps: Deps, job: Selectable<JobsTable>): Promise<JobOutcome> => {
   switch (job.kind) {
     case 'advance':
-    case 'webhook':
       return advance(deps, job.run_id);
     case 'reminder':
       return reminder(deps, job.run_id);
+    case 'nudge':
+      return nudge(deps, job.run_id);
     case 'give_up':
       return giveUp(deps, job.run_id);
   }
 };
 
-const claimJobs = (deps: Deps, now: Date, limit: number): Promise<Selectable<JobsTable>[]> =>
+export const claimJob = (deps: Deps, now: Date): Promise<Selectable<JobsTable> | undefined> =>
   deps.db
     .updateTable('jobs')
-    .set({ locked_until: new Date(now.getTime() + LOCK_MS) })
+    .set({ locked_until: new Date(now.getTime() + LOCK_MS), attempts: sql`attempts + 1` })
     .where('id', 'in', (qb) =>
       qb
         .selectFrom('jobs')
@@ -34,11 +52,18 @@ const claimJobs = (deps: Deps, now: Date, limit: number): Promise<Selectable<Job
         .where('run_at', '<=', now)
         .where((eb) => eb.or([eb('locked_until', 'is', null), eb('locked_until', '<', now)]))
         .orderBy('run_at')
-        .limit(limit)
+        .limit(1)
         .forUpdate()
         .skipLocked(),
     )
     .returningAll()
+    .executeTakeFirst();
+
+const renewLock = (deps: Deps, job: Selectable<JobsTable>): Promise<unknown> =>
+  deps.db
+    .updateTable('jobs')
+    .set({ locked_until: new Date(deps.clock.now().getTime() + LOCK_MS) })
+    .where('id', '=', job.id)
     .execute();
 
 const settle = async (
@@ -55,51 +80,72 @@ const settle = async (
       .execute();
     return;
   }
-  const attempts = job.attempts + 1;
-  const backoff = BACKOFF_MS[attempts - 1];
+  const backoff = BACKOFF_MS[job.attempts - 1];
   if (backoff === undefined) {
     const loaded = await loadRun(deps.db, job.run_id);
     if (loaded !== undefined) {
-      await failRun(deps.db, loaded, outcome.error, now);
+      if (job.kind === 'reminder' || job.kind === 'nudge') {
+        await logRun(deps.db, job.run_id, now, {
+          stepIndex: loaded.run.step_index,
+          level: 'warn',
+          message: EXHAUSTED_COURTESY[job.kind],
+          context: { code: outcome.error.code },
+        });
+      } else {
+        await failRun(deps.db, loaded, outcome.error, now);
+      }
     }
     await deps.db
       .updateTable('jobs')
-      .set({ status: 'failed', attempts, locked_until: null })
+      .set({ status: 'failed', locked_until: null })
       .where('id', '=', job.id)
       .execute();
     return;
   }
   await deps.db
     .updateTable('jobs')
-    .set({ attempts, run_at: new Date(now.getTime() + backoff), locked_until: null })
+    .set({ run_at: new Date(now.getTime() + backoff), locked_until: null })
     .where('id', '=', job.id)
     .execute();
   await logRun(deps.db, job.run_id, now, {
     stepIndex: null,
     level: 'warn',
     message: `${outcome.error.message} · retrying in ${backoff / 1000} s`,
-    context: { code: outcome.error.code, attempt: attempts },
+    context: { code: outcome.error.code, attempt: job.attempts },
   });
 };
 
-export const tick = async (deps: Deps, limit = 10): Promise<number> => {
-  const jobs = await claimJobs(deps, deps.clock.now(), limit);
-  for (const job of jobs) {
-    let outcome: JobOutcome;
-    try {
-      outcome = await dispatch(deps, job);
-    } catch (error) {
-      outcome = {
-        kind: 'retry',
-        error: {
-          code: 'INTERNAL',
-          message: error instanceof Error ? error.message : String(error),
-        },
-      };
-    }
-    await settle(deps, job, outcome);
+const runJob = async (deps: Deps, job: Selectable<JobsTable>): Promise<void> => {
+  if (job.attempts > MAX_ATTEMPTS) {
+    await settle(deps, job, { kind: 'retry', error: INTERRUPTED });
+    return;
   }
-  return jobs.length;
+  const renewal = setInterval(() => {
+    renewLock(deps, job).catch(() => undefined);
+  }, RENEW_MS);
+  let outcome: JobOutcome;
+  try {
+    outcome = await dispatch(deps, job);
+  } catch (error) {
+    console.error(error);
+    outcome = { kind: 'retry', error: CRASHED };
+  } finally {
+    clearInterval(renewal);
+  }
+  await settle(deps, job, outcome);
+};
+
+export const tick = async (deps: Deps, limit = 10): Promise<number> => {
+  let processed = 0;
+  while (processed < limit) {
+    const job = await claimJob(deps, deps.clock.now());
+    if (job === undefined) {
+      break;
+    }
+    processed += 1;
+    await runJob(deps, job);
+  }
+  return processed;
 };
 
 export const startWorker = (deps: Deps, pollMs: number): (() => void) => {

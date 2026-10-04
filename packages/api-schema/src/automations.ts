@@ -61,14 +61,14 @@ export type AutomationsResponse = Static<typeof AutomationsResponse>;
 
 export const CreateAutomationRequest = Type.Object({
   accountId: AccountIdSchema,
-  name: Type.String({ minLength: 1 }),
+  name: Type.String({ minLength: 1, maxLength: 120 }),
 });
 
 export type CreateAutomationRequest = Static<typeof CreateAutomationRequest>;
 
 export const UpdateDraftRequest = Type.Object({
   definition: DefinitionSchema,
-  note: Type.Optional(Type.String()),
+  note: Type.Optional(Type.String({ maxLength: 1000 })),
 });
 
 export type UpdateDraftRequest = Static<typeof UpdateDraftRequest>;

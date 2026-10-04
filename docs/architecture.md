@@ -139,9 +139,9 @@ runs                id, automation_id, version_id, account_id, contact_id, trigg
                     UNIQUE (automation_id, contact_id) WHERE status IN ('running','waiting')  -- HD-009
 run_logs            id, run_id, step_index NULL, level, message, context jsonb, at
 outbound_calls      id, run_id, idempotency_key UNIQUE, kind, request jsonb, response jsonb, status, at
-jobs                id, kind ('advance'|'reminder'|'give_up'|'webhook'), run_id, run_at, attempts, locked_until NULL, status
+jobs                id, kind ('advance'|'reminder'|'give_up'|'nudge'), run_id, run_at, attempts, locked_until NULL, status
 ```
-Queue: `SELECT … FROM jobs WHERE status='pending' AND run_at <= $now AND (locked_until IS NULL OR locked_until < $now) ORDER BY run_at FOR UPDATE SKIP LOCKED LIMIT n` (HD-008, HD-010). `$now` is the injected clock.
+Queue: `SELECT … FROM jobs WHERE status='pending' AND run_at <= $now AND (locked_until IS NULL OR locked_until < $now) ORDER BY run_at FOR UPDATE SKIP LOCKED LIMIT 1` (HD-008, HD-010). `$now` is the injected clock. A claim sets `locked_until = $now + 60 s` and `attempts + 1`; the worker renews the lock every 20 s while the job runs (AD-019).
 
 Context jsonb on a run: `{ commentId?, postId?, conversationId?, lastInboundAt, captured: { email? }, replied: boolean }`.
 
@@ -154,13 +154,13 @@ Context jsonb on a run: `{ commentId?, postId?, conversationId?, lastInboundAt, 
    - `reply_to_comment`: check `privateReply`/`publicReply` windows from the record and the comment's `createdAt`; call the gateway with an idempotency key; log; on `ALREADY_REPLIED` or `REPLY_WINDOW_CLOSED` → fail (non-retryable); on `RATE_LIMITED` → requeue with backoff.
    - `send_message`: if the record says the commenter is messageable only via private reply and no conversation exists yet → send as a private reply to the comment (this is how the first message on Instagram and Facebook goes out); otherwise send to the conversation, checking the conversation window from `lastInboundAt`; `RECIPIENT_UNREACHABLE` → apply `onUnreachable`.
    - `wait_for_reply`: set `waiting`, `wait_until = now + giveUpHours`, `reminder_at = now + afterHours` only if `canRemindBeforeReply(record)`, enqueue `give_up` and `reminder` jobs; stop.
-   - `call_webhook`: POST JSON `{ automation, version, run, contact, captured }`; 15 s timeout; one retry; non-2xx logged; the run completes.
+   - `call_webhook`: POST JSON `{ automation, version, run, contact, captured }`; the hostname must not resolve to a private, loopback, link-local or cloud-metadata address (AD-019); redirects are not followed; 10 s timeout; one retry; non-2xx logged; the run completes.
    - End of steps → `completed`.
-5. **Timers.** `reminder`: if still waiting and not replied and not yet sent → send reminder text through the message path, mark sent. `give_up`: if still waiting → `expired`.
+5. **Timers.** Each timer locks the run row (`FOR UPDATE`) and re-checks `status = 'waiting'` before acting; every status transition is conditional on the status it leaves (AD-019). `reminder`: if still waiting and not replied and not yet sent → send reminder text through the message path, mark sent; out of retries → log "Reminder could not be sent", the run keeps waiting. `give_up`: if still waiting → `expired`.
 
 ## 7. Resuming a waiting run
 
-An inbound message from the contact while a run is `waiting`: update `lastInboundAt`, `replied=true`. If `expect='email'`: extract the first email; found → store in `context.captured.email` and on the contact, advance; not found → if not yet nudged, send the nudge text and set `nudged=true` (stay waiting), else if `then='end'` → `expired`, else stay waiting. If `expect='any'` → advance.
+An inbound message from the contact while a run is `waiting`: update `lastInboundAt`, `replied=true`. If `expect='email'`: extract the first email; found → store in `context.captured.email` and on the contact, advance; not found → if not yet nudged, enqueue a `nudge` job that sends the nudge text and sets `nudged=true` once the send succeeds (stay waiting), else if `then='end'` → `expired`, else stay waiting. If `expect='any'` → advance.
 
 ## 8. The stand (schema `stand`)
 

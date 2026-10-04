@@ -27,7 +27,7 @@ export type AutomationState = 'draft' | 'live' | 'archived';
 
 export type RunStatus = 'running' | 'waiting' | 'completed' | 'failed' | 'expired' | 'superseded';
 
-export type JobKind = 'advance' | 'reminder' | 'give_up' | 'webhook';
+export type JobKind = 'advance' | 'reminder' | 'give_up' | 'nudge';
 
 export type JobStatus = 'pending' | 'done' | 'failed';
 
