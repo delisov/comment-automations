@@ -22,3 +22,18 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+  stand:
+    build:
+      context: .
+      dockerfile: packages/stand/Dockerfile
+      args:
+        GIT_SHA: ${GIT_SHA:-dev}
+    ports:
+      - '${STAND_PORT:-3100}:3100'
+    environment:
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/app
+      SERVICE_URL: http://api:3000
+      SERVICE_TOKEN: ${SERVICE_TOKEN:-dev-token}
+    depends_on:
+      postgres:
+        condition: service_healthy
