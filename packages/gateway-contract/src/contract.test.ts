@@ -134,11 +134,12 @@ describe('gateway contract schemas', () => {
 });
 
 describe('gateway error codes', () => {
-  it('maps each of the ten codes to its HTTP status', () => {
+  it('maps each of the eleven codes to its HTTP status', () => {
     const expected: Record<GatewayErrorCode, number> = {
       ALREADY_REPLIED: 409,
       REPLY_WINDOW_CLOSED: 403,
       MESSAGING_WINDOW_CLOSED: 403,
+      MESSAGE_CAP_REACHED: 409,
       RECIPIENT_UNREACHABLE: 403,
       MESSAGE_TOO_LONG: 422,
       BUTTONS_NOT_SUPPORTED: 422,

@@ -36,6 +36,8 @@ const REFUSAL_MESSAGES: Record<GatewayErrorCode, string> = {
   ALREADY_REPLIED: 'This comment already received a private reply',
   REPLY_WINDOW_CLOSED: 'The private reply window for this comment has closed',
   MESSAGING_WINDOW_CLOSED: 'The messaging window for this conversation has closed',
+  MESSAGE_CAP_REACHED:
+    'The account sent the most messages the platform allows before the user replies',
   RECIPIENT_UNREACHABLE: 'The account may not message this user',
   MESSAGE_TOO_LONG: 'The text exceeds the platform limit',
   BUTTONS_NOT_SUPPORTED: 'The platform does not allow this many buttons',

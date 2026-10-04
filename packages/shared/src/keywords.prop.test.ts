@@ -1,6 +1,6 @@
 import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
-import { matchesKeywords } from './keywords.js';
+import { isMatchableKeyword, matchesKeywords } from './keywords.js';
 
 const letters = [
   ...'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789абвгдежзийклмнопрстуфхцчшщэюяÀÉÎÕÜàéîõü',
@@ -75,6 +75,19 @@ describe('matchesKeywords invariants', () => {
       fc.property(word, word, word, (prefix, keyword, suffix) => {
         expect(matchesKeywords(`${prefix}${keyword}${suffix}`, [keyword])).toBe(false);
       }),
+    );
+  });
+});
+
+describe('isMatchableKeyword invariants', () => {
+  it('a comment consisting of exactly a keyword that validates matches that keyword', () => {
+    fc.assert(
+      fc.property(
+        fc.string({ unit: 'grapheme', minLength: 1, maxLength: 20 }).filter(isMatchableKeyword),
+        (keyword) => {
+          expect(matchesKeywords(keyword, [keyword])).toBe(true);
+        },
+      ),
     );
   });
 });

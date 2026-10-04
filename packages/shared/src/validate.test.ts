@@ -236,11 +236,15 @@ describe('validateDefinition send_message', () => {
   });
 
   it('checks button count, title length and url scheme', () => {
+    const inConversation: Definition = {
+      trigger: { messages: { keywords: ['hi'] }, onRepeatWhileWaiting: 'supersede' },
+      steps: [],
+    };
     const button = { title: 'Open', url: 'https://example.com' };
     expect(
       codes(
         validateDefinition(
-          withSteps([message({ buttons: [button, button, button, button] })]),
+          withSteps([message({ buttons: [button, button, button, button] })], inConversation),
           capabilities.instagram,
         ),
       ),
@@ -248,15 +252,18 @@ describe('validateDefinition send_message', () => {
     expect(
       codes(
         validateDefinition(
-          withSteps([
-            message({
-              buttons: [
-                { title: '', url: 'https://example.com' },
-                { title: 'x'.repeat(21), url: 'ftp://example.com' },
-                { title: 'ok', url: 'not a url' },
-              ],
-            }),
-          ]),
+          withSteps(
+            [
+              message({
+                buttons: [
+                  { title: '', url: 'https://example.com' },
+                  { title: 'x'.repeat(21), url: 'ftp://example.com' },
+                  { title: 'ok', url: 'not a url' },
+                ],
+              }),
+            ],
+            inConversation,
+          ),
           capabilities.instagram,
         ),
       ),
@@ -605,14 +612,38 @@ describe('validateDefinition template placeholders', () => {
     ).toEqual([]);
   });
 
-  it('measures length on the raw template text, before placeholders are filled', () => {
-    const text = `${'a'.repeat(980)}{{contact.handle}}`;
-    expect(validateDefinition(withSteps([message(text)]), capabilities.instagram)).toEqual([]);
+  it('measures length with the longest value each placeholder can take: handle 30, email 254', () => {
+    const handle = `${'a'.repeat(970)}{{contact.handle}}`;
+    expect(validateDefinition(withSteps([message(handle)]), capabilities.instagram)).toEqual([]);
+    expect(validateDefinition(withSteps([message(`${handle}a`)]), capabilities.instagram)).toEqual([
+      {
+        path: 'steps.0.text',
+        code: 'TEXT_TOO_LONG',
+        message: 'Text may be 1001 characters once filled in, the limit is 1000',
+      },
+      {
+        path: 'steps.0.text',
+        code: 'TEXT_TOO_MANY_BYTES',
+        message: 'Text may be 1001 bytes in UTF-8 once filled in, the limit is 1000',
+      },
+    ]);
+    const email = `${'a'.repeat(746)}{{email}}`;
     expect(
-      codes(validateDefinition(withSteps([message(`${text}aaa`)]), capabilities.instagram)),
+      validateDefinition(
+        withSteps([message('Email?'), waitForEmail, message(email)]),
+        capabilities.instagram,
+      ),
+    ).toEqual([]);
+    expect(
+      codes(
+        validateDefinition(
+          withSteps([message('Email?'), waitForEmail, message(`${email}a`)]),
+          capabilities.instagram,
+        ),
+      ),
     ).toEqual([
-      { path: 'steps.0.text', code: 'TEXT_TOO_LONG' },
-      { path: 'steps.0.text', code: 'TEXT_TOO_MANY_BYTES' },
+      { path: 'steps.2.text', code: 'TEXT_TOO_LONG' },
+      { path: 'steps.2.text', code: 'TEXT_TOO_MANY_BYTES' },
     ]);
   });
 });
@@ -631,4 +662,183 @@ describe('validateDefinition call_webhook', () => {
       { path: 'steps.0.url', code: 'URL_INVALID' },
     ]);
   });
+});
+
+describe('validateDefinition keywords', () => {
+  const unmatchable = (path: string): ValidationIssue => ({
+    path,
+    code: 'KEYWORD_UNMATCHABLE',
+    message: 'A keyword needs at least one letter, number or emoji',
+  });
+
+  it('rejects a keyword that could never match a comment, on its own path', () => {
+    const definition: Definition = {
+      trigger: {
+        comments: { posts: { kind: 'any' }, keywords: ['pricing', '!!!', '  ', '…'] },
+        messages: { keywords: ['', '🔥'] },
+        onRepeatWhileWaiting: 'supersede',
+      },
+      steps: [],
+    };
+    expect(validateDefinition(definition, capabilities.instagram)).toEqual([
+      unmatchable('trigger.comments.keywords.1'),
+      unmatchable('trigger.comments.keywords.2'),
+      unmatchable('trigger.comments.keywords.3'),
+      unmatchable('trigger.messages.keywords.0'),
+    ]);
+  });
+
+  it('accepts keywords made of letters, digits, scripts without word spacing or emoji', () => {
+    const definition: Definition = {
+      trigger: {
+        comments: { posts: { kind: 'any' }, keywords: ['café', '42', '价格', '❤️', 'price list'] },
+        onRepeatWhileWaiting: 'supersede',
+      },
+      steps: [],
+    };
+    expect(validateDefinition(definition, capabilities.instagram)).toEqual([]);
+  });
+});
+
+describe('validateDefinition text length in UTF-16 code units', () => {
+  const message = (text: string): Step => ({ kind: 'send_message', text, buttons: [] });
+
+  it('counts an emoji as two units, as the platforms do', () => {
+    expect(
+      codes(validateDefinition(withSteps([message('😀'.repeat(600))]), capabilities.instagram)),
+    ).toEqual([
+      { path: 'steps.0.text', code: 'TEXT_TOO_LONG' },
+      { path: 'steps.0.text', code: 'TEXT_TOO_MANY_BYTES' },
+    ]);
+    expect(
+      validateDefinition(withSteps([message('😀'.repeat(1000))]), capabilities.facebook),
+    ).toEqual([]);
+    expect(
+      validateDefinition(withSteps([message('😀'.repeat(1001))]), capabilities.facebook),
+    ).toEqual([
+      {
+        path: 'steps.0.text',
+        code: 'TEXT_TOO_LONG',
+        message: 'Text is 2002 characters, the limit is 2000',
+      },
+    ]);
+  });
+});
+
+describe('validateDefinition give-up and reminder bounds', () => {
+  const messagesTrigger: Definition = {
+    trigger: { messages: { keywords: ['hi'] }, onRepeatWhileWaiting: 'supersede' },
+    steps: [],
+  };
+  const message: Step = { kind: 'send_message', text: 'What is your email?', buttons: [] };
+  const waitFor = (giveUpHours: number, afterHours?: number): Step => ({
+    kind: 'wait_for_reply',
+    expect: 'email',
+    giveUpHours,
+    ...(afterHours === undefined ? {} : { reminder: { afterHours, text: 'Still there?' } }),
+  });
+  const giveUpInvalid: ValidationIssue = {
+    path: 'steps.1.giveUpHours',
+    code: 'GIVE_UP_HOURS_INVALID',
+    message: 'The give-up time is a whole number of hours from 1 to 720',
+  };
+
+  it('keeps the give-up time a whole number of hours from 1 to 720', () => {
+    const on = (step: Step) =>
+      validateDefinition(withSteps([message, step], messagesTrigger), capabilities.tiktok);
+    expect(on(waitFor(1e10))).toEqual([giveUpInvalid]);
+    expect(on(waitFor(721))).toEqual([giveUpInvalid]);
+    expect(on(waitFor(0.5))).toEqual([giveUpInvalid]);
+    expect(on(waitFor(720))).toEqual([]);
+    expect(on(waitFor(1))).toEqual([]);
+  });
+
+  it('keeps the reminder a whole number of hours below the give-up time', () => {
+    const on = (step: Step) =>
+      validateDefinition(withSteps([message, step], messagesTrigger), capabilities.tiktok);
+    expect(on(waitFor(720, 1e10))).toEqual([
+      {
+        path: 'steps.1.reminder.afterHours',
+        code: 'REMINDER_DELAY_INVALID',
+        message:
+          'The reminder must go out a whole number of hours after the message, at least one and before the give-up time',
+      },
+    ]);
+    expect(codes(on(waitFor(720, 1.5)))).toEqual([
+      { path: 'steps.1.reminder.afterHours', code: 'REMINDER_DELAY_INVALID' },
+    ]);
+    expect(on(waitFor(720, 47))).toEqual([]);
+  });
+});
+
+describe('validateDefinition consecutive messages', () => {
+  const messagesTrigger: Definition = {
+    trigger: { messages: { keywords: ['hi'] }, onRepeatWhileWaiting: 'supersede' },
+    steps: [],
+  };
+  const message: Step = { kind: 'send_message', text: 'Hello', buttons: [] };
+  const wait: Step = { kind: 'wait_for_reply', expect: 'any', giveUpHours: 24 };
+  const capReached = (index: number): ValidationIssue => ({
+    path: `steps.${index}.kind`,
+    code: 'STEP_NOT_ALLOWED_HERE',
+    message: 'TikTok allows at most 10 messages in a row before the contact replies',
+  });
+
+  it('on TikTok refuses the eleventh message in a row until a wait for the reply resets the count', () => {
+    const messages = (count: number): Step[] => Array.from({ length: count }, () => message);
+    const on = (steps: Step[]) =>
+      validateDefinition(withSteps(steps, messagesTrigger), capabilities.tiktok);
+    expect(on(messages(10))).toEqual([]);
+    expect(on(messages(11))).toEqual([capReached(10)]);
+    expect(on(messages(12))).toEqual([capReached(10), capReached(11)]);
+    expect(on([...messages(10), wait, ...messages(10)])).toEqual([]);
+  });
+
+  it('on WhatsApp, which declares no cap, accepts twelve messages in a row', () => {
+    const steps: Step[] = Array.from({ length: 12 }, () => message);
+    expect(validateDefinition(withSteps(steps, messagesTrigger), capabilities.whatsapp)).toEqual(
+      [],
+    );
+  });
+});
+
+describe('validateDefinition buttons on a private reply', () => {
+  const button = { title: 'Open the guide', url: 'https://example.com/guide' };
+  const withButtons: Step = { kind: 'send_message', text: 'Here you go', buttons: [button] };
+  const wait: Step = { kind: 'wait_for_reply', expect: 'any', giveUpHours: 24 };
+  const privateReply = (index: number): ValidationIssue => ({
+    path: `steps.${index}.buttons`,
+    code: 'BUTTONS_IN_PRIVATE_REPLY',
+    message:
+      'This message is delivered as a private reply to the comment, which cannot carry buttons',
+  });
+
+  it.each(['instagram', 'facebook'] as const)(
+    'on %s refuses buttons on the first message of a comment-started flow and allows them after the reply',
+    (platform) => {
+      const record = capabilities[platform];
+      expect(validateDefinition(withSteps([withButtons]), record)).toEqual([privateReply(0)]);
+      expect(
+        validateDefinition(
+          withSteps([{ kind: 'reply_to_comment', text: 'Check your DMs' }, withButtons]),
+          record,
+        ),
+      ).toEqual([privateReply(1)]);
+      expect(
+        validateDefinition(
+          withSteps([{ kind: 'send_message', text: 'Email?', buttons: [] }, wait, withButtons]),
+          record,
+        ),
+      ).toEqual([]);
+      expect(
+        validateDefinition(
+          withSteps([withButtons], {
+            trigger: { messages: { keywords: [] }, onRepeatWhileWaiting: 'supersede' },
+            steps: [],
+          }),
+          record,
+        ),
+      ).toEqual([]);
+    },
+  );
 });

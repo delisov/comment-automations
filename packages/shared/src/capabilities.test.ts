@@ -3,6 +3,7 @@ import {
   allowedStepKinds,
   allowedTriggers,
   canRemindBeforeReply,
+  deliveredAsPrivateReply,
   nextAllowedStepKinds,
   requiresUnreachableChoice,
 } from './capabilities.js';
@@ -218,5 +219,33 @@ describe('canRemindBeforeReply', () => {
   it('is false on Instagram and Facebook, true where a second message may go out first', () => {
     const canRemind = PLATFORMS.filter((platform) => canRemindBeforeReply(capabilities[platform]));
     expect(canRemind).toEqual(['x', 'bluesky', 'whatsapp', 'tiktok']);
+  });
+});
+
+describe('nextAllowedStepKinds consecutive messages', () => {
+  it('on TikTok withholds the eleventh message in a row until a wait for the reply', () => {
+    const next = (steps: Step[]) =>
+      nextAllowedStepKinds(capabilities.tiktok, messagesTrigger, steps);
+    const ten = Array.from({ length: 10 }, () => send);
+    expect(next(ten.slice(0, 9))).toEqual(['send_message', 'wait_for_reply', 'call_webhook']);
+    expect(next(ten)).toEqual(['wait_for_reply', 'call_webhook']);
+    expect(next([...ten, wait])).toEqual(['send_message', 'call_webhook']);
+    expect(nextAllowedStepKinds(capabilities.whatsapp, messagesTrigger, ten)).toEqual([
+      'send_message',
+      'wait_for_reply',
+      'call_webhook',
+    ]);
+  });
+});
+
+describe('deliveredAsPrivateReply', () => {
+  it('is true only on private-reply networks, with a comments trigger, before any wait for the reply', () => {
+    expect(deliveredAsPrivateReply(capabilities.instagram, commentsTrigger, [])).toBe(true);
+    expect(deliveredAsPrivateReply(capabilities.facebook, bothTriggers, [reply])).toBe(true);
+    expect(deliveredAsPrivateReply(capabilities.instagram, commentsTrigger, [send, wait])).toBe(
+      false,
+    );
+    expect(deliveredAsPrivateReply(capabilities.instagram, messagesTrigger, [])).toBe(false);
+    expect(deliveredAsPrivateReply(capabilities.bluesky, commentsTrigger, [])).toBe(false);
   });
 });
