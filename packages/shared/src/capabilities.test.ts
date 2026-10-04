@@ -3,10 +3,29 @@ import {
   allowedStepKinds,
   allowedTriggers,
   canRemindBeforeReply,
+  nextAllowedStepKinds,
   requiresUnreachableChoice,
 } from './capabilities.js';
+import type { Step, Trigger } from './definition.js';
 import { PLATFORMS } from './platform.js';
 import { capabilities } from './platforms/index.js';
+
+const commentsTrigger: Trigger = {
+  comments: { posts: { kind: 'any' }, keywords: ['pricing'] },
+  onRepeatWhileWaiting: 'supersede',
+};
+const messagesTrigger: Trigger = { messages: { keywords: [] }, onRepeatWhileWaiting: 'supersede' };
+const bothTriggers: Trigger = { ...commentsTrigger, ...messagesTrigger };
+
+const reply: Step = { kind: 'reply_to_comment', text: 'Check your inbox' };
+const send: Step = { kind: 'send_message', text: 'What is your email?', buttons: [] };
+const wait: Step = { kind: 'wait_for_reply', expect: 'email', giveUpHours: 72 };
+const webhook: Step = {
+  kind: 'call_webhook',
+  method: 'POST',
+  url: 'https://crm.example.com/hook',
+  headers: {},
+};
 
 describe('capability records', () => {
   it('declares one record per platform, each naming its own platform', () => {
@@ -39,6 +58,27 @@ describe('capability records', () => {
       durationMs: 48 * 60 * 60 * 1000,
     });
     expect(capabilities.tiktok.maxConsecutiveMessages).toBe(10);
+  });
+
+  it('lets a WhatsApp message carry one URL button', () => {
+    expect(capabilities.whatsapp.messageLimits).toEqual({
+      maxChars: 4096,
+      buttons: 1,
+      linksInText: true,
+    });
+  });
+
+  it('expects the account’s own replies to come back as events on every network with comments', () => {
+    const echoing = PLATFORMS.filter((platform) => capabilities[platform].ownActivityEcho);
+    expect(echoing).toEqual([
+      'instagram',
+      'facebook',
+      'threads',
+      'x',
+      'bluesky',
+      'youtube',
+      'linkedin',
+    ]);
   });
 });
 
@@ -79,6 +119,83 @@ describe('allowedStepKinds', () => {
       tiktok: ['send_message', 'wait_for_reply', 'call_webhook'],
       pinterest: ['call_webhook'],
     });
+  });
+});
+
+describe('nextAllowedStepKinds', () => {
+  it('on Instagram offers a second message only once a wait for the reply follows the first', () => {
+    const next = (steps: Step[]) =>
+      nextAllowedStepKinds(capabilities.instagram, commentsTrigger, steps);
+    expect(next([])).toEqual(['reply_to_comment', 'send_message', 'call_webhook']);
+    expect(next([reply])).toEqual(['reply_to_comment', 'send_message', 'call_webhook']);
+    expect(next([reply, send])).toEqual(['reply_to_comment', 'wait_for_reply', 'call_webhook']);
+    expect(next([reply, send, webhook])).toEqual([
+      'reply_to_comment',
+      'wait_for_reply',
+      'call_webhook',
+    ]);
+    expect(next([reply, send, wait])).toEqual(['reply_to_comment', 'send_message', 'call_webhook']);
+    expect(next([reply, send, wait, webhook])).toEqual([
+      'reply_to_comment',
+      'send_message',
+      'call_webhook',
+    ]);
+    expect(next([send, wait, send])).toEqual([
+      'reply_to_comment',
+      'wait_for_reply',
+      'call_webhook',
+    ]);
+  });
+
+  it('on Bluesky offers a second message right away, and a wait only right after a message', () => {
+    const next = (steps: Step[]) =>
+      nextAllowedStepKinds(capabilities.bluesky, commentsTrigger, steps);
+    expect(next([])).toEqual(['reply_to_comment', 'send_message', 'call_webhook']);
+    expect(next([send])).toEqual([
+      'reply_to_comment',
+      'send_message',
+      'wait_for_reply',
+      'call_webhook',
+    ]);
+    expect(next([send, wait])).toEqual(['reply_to_comment', 'send_message', 'call_webhook']);
+    expect(next([send, webhook])).toEqual([
+      'reply_to_comment',
+      'send_message',
+      'wait_for_reply',
+      'call_webhook',
+    ]);
+  });
+
+  it('offers the comment reply only when the trigger includes comments', () => {
+    expect(nextAllowedStepKinds(capabilities.instagram, messagesTrigger, [])).toEqual([
+      'send_message',
+      'call_webhook',
+    ]);
+    expect(nextAllowedStepKinds(capabilities.instagram, bothTriggers, [])).toEqual([
+      'reply_to_comment',
+      'send_message',
+      'call_webhook',
+    ]);
+    expect(nextAllowedStepKinds(capabilities.whatsapp, messagesTrigger, [])).toEqual([
+      'send_message',
+      'call_webhook',
+    ]);
+    expect(nextAllowedStepKinds(capabilities.youtube, commentsTrigger, [])).toEqual([
+      'reply_to_comment',
+      'call_webhook',
+    ]);
+  });
+
+  it('taken over every position adds up to allowedStepKinds on every platform', () => {
+    for (const platform of PLATFORMS) {
+      const record = capabilities[platform];
+      const union = new Set(
+        [[], [send], [send, wait]].flatMap((steps) =>
+          nextAllowedStepKinds(record, bothTriggers, steps),
+        ),
+      );
+      expect([...union].sort()).toEqual([...allowedStepKinds(record)].sort());
+    }
   });
 });
 

@@ -3,6 +3,7 @@ import {
   allowedStepKinds,
   allowedTriggers,
   canRemindBeforeReply,
+  nextAllowedStepKinds,
   requiresUnreachableChoice,
 } from './capabilities.js';
 import type {
@@ -10,14 +11,28 @@ import type {
   Definition,
   ReplyToCommentStep,
   SendMessageStep,
-  Step,
+  StepKind,
   Trigger,
   WaitForReplyStep,
 } from './definition.js';
 import { WEBHOOK_METHODS } from './definition.js';
+import { hoursToMs } from './durations.js';
 import { PLATFORM_LABELS } from './platform.js';
 
 export type ValidationIssue = { path: string; code: string; message: string };
+
+type StepContext = { record: CapabilityRecord; trigger: Trigger; emailCaptured: boolean };
+
+const PLACEHOLDER = /\{\{([^}]*)\}\}/g;
+
+const KNOWN_PLACEHOLDERS = ['email', 'contact.handle'];
+
+const NOT_ALLOWED_HERE: Record<StepKind, string> = {
+  send_message: 'A second message needs a wait for a reply before it on this network',
+  reply_to_comment: 'Replying to the comment needs a comments trigger',
+  wait_for_reply: 'Waiting needs a message right before it',
+  call_webhook: 'Calling a webhook is allowed at every position',
+};
 
 const charCount = (text: string): number => [...text].length;
 
@@ -32,10 +47,35 @@ const isHttpUrl = (url: string): boolean => {
   }
 };
 
+const placeholderIssues = (text: string, path: string, emailCaptured: boolean): ValidationIssue[] =>
+  [...text.matchAll(PLACEHOLDER)].flatMap(([placeholder, name]) => {
+    const known = (name ?? '').trim();
+    if (!KNOWN_PLACEHOLDERS.includes(known)) {
+      return [
+        {
+          path,
+          code: 'UNKNOWN_PLACEHOLDER',
+          message: `${placeholder} is not a placeholder; use {{email}} or {{contact.handle}}`,
+        },
+      ];
+    }
+    if (known === 'email' && !emailCaptured) {
+      return [
+        {
+          path,
+          code: 'EMAIL_NOT_CAPTURED_YET',
+          message: '{{email}} is only known after a wait for a reply that expects an email',
+        },
+      ];
+    }
+    return [];
+  });
+
 const textIssues = (
   text: string,
   path: string,
   limits: { maxChars: number; maxBytes?: number },
+  emailCaptured: boolean,
 ): ValidationIssue[] => {
   const issues: ValidationIssue[] = [];
   if (text.trim() === '') {
@@ -54,6 +94,7 @@ const textIssues = (
       message: `Text is ${byteCount(text)} bytes in UTF-8, the limit is ${limits.maxBytes}`,
     });
   }
+  issues.push(...placeholderIssues(text, path, emailCaptured));
   return issues;
 };
 
@@ -99,8 +140,8 @@ const triggerIssues = (trigger: Trigger, record: CapabilityRecord): ValidationIs
 const replyIssues = (
   step: ReplyToCommentStep,
   path: string,
-  record: CapabilityRecord,
-): ValidationIssue[] => textIssues(step.text, `${path}.text`, record.replyLimits);
+  { record, emailCaptured }: StepContext,
+): ValidationIssue[] => textIssues(step.text, `${path}.text`, record.replyLimits, emailCaptured);
 
 const buttonIssues = (
   buttons: SendMessageStep['buttons'],
@@ -141,7 +182,7 @@ const buttonIssues = (
 const unreachableIssues = (
   step: SendMessageStep,
   path: string,
-  record: CapabilityRecord,
+  { record, trigger, emailCaptured }: StepContext,
 ): ValidationIssue[] => {
   const issues: ValidationIssue[] = [];
   const required = requiresUnreachableChoice(record);
@@ -160,6 +201,13 @@ const unreachableIssues = (
     });
   }
   if (step.onUnreachable === 'publicReplyInstead') {
+    if (trigger.comments === undefined) {
+      issues.push({
+        path: `${path}.onUnreachable`,
+        code: 'PUBLIC_REPLY_NEEDS_COMMENTS_TRIGGER',
+        message: 'Replying publicly instead needs a comments trigger',
+      });
+    }
     if (step.fallbackText === undefined) {
       issues.push({
         path: `${path}.fallbackText`,
@@ -167,7 +215,9 @@ const unreachableIssues = (
         message: 'Replying publicly instead needs the text of that public reply',
       });
     } else {
-      issues.push(...textIssues(step.fallbackText, `${path}.fallbackText`, record.replyLimits));
+      issues.push(
+        ...textIssues(step.fallbackText, `${path}.fallbackText`, record.replyLimits, emailCaptured),
+      );
     }
   }
   return issues;
@@ -176,27 +226,19 @@ const unreachableIssues = (
 const messageIssues = (
   step: SendMessageStep,
   path: string,
-  record: CapabilityRecord,
+  context: StepContext,
 ): ValidationIssue[] => [
-  ...textIssues(step.text, `${path}.text`, record.messageLimits),
-  ...buttonIssues(step.buttons, `${path}.buttons`, record.messageLimits),
-  ...unreachableIssues(step, path, record),
+  ...textIssues(step.text, `${path}.text`, context.record.messageLimits, context.emailCaptured),
+  ...buttonIssues(step.buttons, `${path}.buttons`, context.record.messageLimits),
+  ...unreachableIssues(step, path, context),
 ];
 
 const waitIssues = (
   step: WaitForReplyStep,
   path: string,
-  record: CapabilityRecord,
-  messageSentBefore: boolean,
+  { record, emailCaptured }: StepContext,
 ): ValidationIssue[] => {
   const issues: ValidationIssue[] = [];
-  if (!messageSentBefore) {
-    issues.push({
-      path,
-      code: 'WAIT_WITHOUT_MESSAGE',
-      message: 'Waiting for a reply needs a message sent earlier in the automation',
-    });
-  }
   if (!(step.giveUpHours > 0)) {
     issues.push({
       path: `${path}.giveUpHours`,
@@ -219,12 +261,30 @@ const waitIssues = (
           message:
             'The reminder must go out after more than zero hours and before the give-up time',
         });
+      } else if (
+        record.conversationWindow !== null &&
+        hoursToMs(step.reminder.afterHours) >= record.conversationWindow.durationMs
+      ) {
+        issues.push({
+          path: `${path}.reminder.afterHours`,
+          code: 'REMINDER_AFTER_WINDOW',
+          message: `${PLATFORM_LABELS[record.platform]} closes the conversation ${record.conversationWindow.durationMs / hoursToMs(1)} hours after the contact's last message; the reminder must go out before that`,
+        });
       }
-      issues.push(...textIssues(step.reminder.text, `${path}.reminder.text`, record.messageLimits));
+      issues.push(
+        ...textIssues(
+          step.reminder.text,
+          `${path}.reminder.text`,
+          record.messageLimits,
+          emailCaptured,
+        ),
+      );
     }
   }
   if (step.nudge !== undefined) {
-    issues.push(...textIssues(step.nudge.text, `${path}.nudge.text`, record.messageLimits));
+    issues.push(
+      ...textIssues(step.nudge.text, `${path}.nudge.text`, record.messageLimits, emailCaptured),
+    );
   }
   return issues;
 };
@@ -248,11 +308,11 @@ const webhookIssues = (step: CallWebhookStep, path: string): ValidationIssue[] =
   return issues;
 };
 
-const stepIssues = (steps: Step[], record: CapabilityRecord): ValidationIssue[] => {
+const stepIssues = (definition: Definition, record: CapabilityRecord): ValidationIssue[] => {
   const kinds = allowedStepKinds(record);
   const issues: ValidationIssue[] = [];
-  let messageSentBefore = false;
-  steps.forEach((step, index) => {
+  let emailCaptured = false;
+  definition.steps.forEach((step, index) => {
     const path = `steps.${index}`;
     if (!kinds.includes(step.kind)) {
       issues.push({
@@ -262,16 +322,25 @@ const stepIssues = (steps: Step[], record: CapabilityRecord): ValidationIssue[] 
       });
       return;
     }
+    const stepsSoFar = definition.steps.slice(0, index);
+    if (!nextAllowedStepKinds(record, definition.trigger, stepsSoFar).includes(step.kind)) {
+      issues.push({
+        path: `${path}.kind`,
+        code: 'STEP_NOT_ALLOWED_HERE',
+        message: NOT_ALLOWED_HERE[step.kind],
+      });
+    }
+    const context: StepContext = { record, trigger: definition.trigger, emailCaptured };
     switch (step.kind) {
       case 'reply_to_comment':
-        issues.push(...replyIssues(step, path, record));
+        issues.push(...replyIssues(step, path, context));
         break;
       case 'send_message':
-        issues.push(...messageIssues(step, path, record));
-        messageSentBefore = true;
+        issues.push(...messageIssues(step, path, context));
         break;
       case 'wait_for_reply':
-        issues.push(...waitIssues(step, path, record, messageSentBefore));
+        issues.push(...waitIssues(step, path, context));
+        emailCaptured = emailCaptured || step.expect === 'email';
         break;
       case 'call_webhook':
         issues.push(...webhookIssues(step, path));
@@ -286,5 +355,5 @@ export const validateDefinition = (
   record: CapabilityRecord,
 ): ValidationIssue[] => [
   ...triggerIssues(definition.trigger, record),
-  ...stepIssues(definition.steps, record),
+  ...stepIssues(definition, record),
 ];

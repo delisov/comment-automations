@@ -1,4 +1,4 @@
-import type { StepKind } from './definition.js';
+import type { Step, StepKind, Trigger } from './definition.js';
 import type { Platform } from './platform.js';
 
 export type CommentEvents = 'push' | 'pull' | 'stream' | 'none';
@@ -34,6 +34,9 @@ export type CapabilityRecord = {
 
 export type AllowedTriggers = { comments: boolean; messages: boolean };
 
+const canReply = (record: CapabilityRecord): boolean =>
+  record.publicReply || record.privateReply !== null;
+
 const canMessage = (record: CapabilityRecord): boolean =>
   record.commenterIsMessageable !== 'no' || record.conversationWindow !== null;
 
@@ -44,11 +47,44 @@ export const allowedTriggers = (record: CapabilityRecord): AllowedTriggers => ({
 
 export const allowedStepKinds = (record: CapabilityRecord): StepKind[] => {
   const kinds: StepKind[] = [];
-  if (record.publicReply || record.privateReply !== null) {
+  if (canReply(record)) {
     kinds.push('reply_to_comment');
   }
   if (canMessage(record)) {
     kinds.push('send_message', 'wait_for_reply');
+  }
+  kinds.push('call_webhook');
+  return kinds;
+};
+
+const stepsSinceLastMessage = (stepsSoFar: Step[]): Step[] | null => {
+  const lastMessage = stepsSoFar.map((step) => step.kind).lastIndexOf('send_message');
+  return lastMessage === -1 ? null : stepsSoFar.slice(lastMessage + 1);
+};
+
+export const nextAllowedStepKinds = (
+  record: CapabilityRecord,
+  trigger: Trigger,
+  stepsSoFar: Step[],
+): StepKind[] => {
+  const sinceMessage = stepsSinceLastMessage(stepsSoFar);
+  const waitedSinceMessage =
+    sinceMessage !== null && sinceMessage.some((step) => step.kind === 'wait_for_reply');
+  const kinds: StepKind[] = [];
+  if (canReply(record) && trigger.comments !== undefined) {
+    kinds.push('reply_to_comment');
+  }
+  if (canMessage(record)) {
+    if (
+      record.commenterIsMessageable !== 'viaPrivateReplyOnly' ||
+      sinceMessage === null ||
+      waitedSinceMessage
+    ) {
+      kinds.push('send_message');
+    }
+    if (sinceMessage !== null && !waitedSinceMessage) {
+      kinds.push('wait_for_reply');
+    }
   }
   kinds.push('call_webhook');
   return kinds;
