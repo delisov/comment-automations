@@ -7,15 +7,15 @@ export type ControlledClock = Clock & {
 
 export const systemClock: Clock = { now: () => new Date() };
 
-export const controlledClock = (initial: Date): ControlledClock => {
-  let current = initial.getTime();
+export const controlledClock = (initial?: Date): ControlledClock => {
+  let offsetMs = initial === undefined ? 0 : initial.getTime() - Date.now();
   return {
-    now: () => new Date(current),
+    now: () => new Date(Date.now() + offsetMs),
     set: (now) => {
-      current = now.getTime();
+      offsetMs = now.getTime() - Date.now();
     },
     advance: (ms) => {
-      current += ms;
+      offsetMs += ms;
     },
   };
 };

@@ -10,7 +10,7 @@ import type {
 import { controlledClock } from '@comment-automations/shared';
 import type { AutomationDetail, PublishResponse, RunDetail } from '@comment-automations/api-schema';
 import type { Kysely } from 'kysely';
-import { describe } from 'vitest';
+import { describe, vi } from 'vitest';
 import type { AppDeps } from '../app.js';
 import { buildApp } from '../app.js';
 import { createDb } from '../db/client.js';
@@ -69,6 +69,8 @@ export type Harness = {
 export const createHarness = async (): Promise<Harness> => {
   const db = createDb(databaseUrl ?? '');
   await migrateToLatest(db);
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(START);
   const clock = controlledClock(START);
   const gateway = fakeGateway();
   const webhookCalls: WebhookCall[] = [];
@@ -198,6 +200,7 @@ export const createHarness = async (): Promise<Harness> => {
     close: async () => {
       await app.close();
       await db.destroy();
+      vi.useRealTimers();
     },
   };
   return harness;

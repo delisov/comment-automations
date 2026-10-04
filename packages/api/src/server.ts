@@ -15,7 +15,7 @@ const deps = {
   sha: config.gitSha,
   db,
   gateway: httpGateway(config.gatewayUrl, config.serviceToken, fetch),
-  clock: config.clockMode === 'controlled' ? controlledClock(systemClock.now()) : systemClock,
+  clock: config.clockMode === 'controlled' ? controlledClock() : systemClock,
   fetch,
   serviceToken: config.serviceToken,
   testMode: config.gatewayMode === 'test',

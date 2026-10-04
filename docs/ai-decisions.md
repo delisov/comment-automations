@@ -187,3 +187,12 @@ Format:
 - Why: The reviews showed a timely reply could be expired and its captured email overwritten by a timer that decided on a stale, unlocked read; a batch claim with no heartbeat and no attempt bump let a hung gateway hold jobs and a crashing job loop forever; a crash between the four autocommits of `wait_for_reply` left a run waiting with no timer; the nudge ran an HTTP call inside the ingest transaction and was marked done even when rate-limited; the webhook executor was an open SSRF oracle into the cluster; the gateway was trusted blindly on the way back.
 - Affects: packages/api (runs/store, runs/start, runs/resume, executor/advance, executor/timers, executor/webhook, worker, gateway/http, gateway/port, config, routes), packages/api-schema request schemas, docs/architecture.md sections 5 to 7
 - Status: active
+
+## AD-020  Controlled clock is wall time plus an offset
+- When: 2026-10-04T12:30+03:00
+- Who: Claude (Fable 5.1), session ffba4ca6
+- Where: end-to-end walk
+- Decision: In controlled mode the clock reports the system time plus an offset. `POST /test/clock { now }` sets the offset to `now - systemNow`; `advance(ms)` adds to the offset; `set(d)` re-anchors it the same way. Timers and windows keep comparing against `clock.now()`, so a timeline reads naturally while windows stay testable by moving the offset.
+- Why: A frozen clock made every timestamp in both UIs equal to the seed time until someone advanced it, so every timeline looked identical.
+- Affects: shared clock, api and stand test routes
+- Status: active
