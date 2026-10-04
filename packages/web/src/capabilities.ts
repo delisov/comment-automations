@@ -8,6 +8,7 @@ import {
   requiresUnreachableChoice,
 } from '@comment-automations/shared';
 import type { Account } from './api/client.js';
+import { platformLabel } from './ui.js';
 
 export const deriveCapabilities = (record: CapabilityRecord): CapabilitiesResponse => ({
   record,
@@ -22,3 +23,6 @@ export const capabilitiesFor = (account: Account): CapabilitiesResponse =>
 
 export const supportsAutomations = (caps: CapabilitiesResponse): boolean =>
   caps.allowedTriggers.comments || caps.allowedTriggers.messages;
+
+export const unsupportedReason = (account: Account): string =>
+  `No comment or message automations on ${platformLabel(account.platform)}`;
