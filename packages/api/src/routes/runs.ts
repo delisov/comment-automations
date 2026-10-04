@@ -72,7 +72,7 @@ export const listRuns = async (
     rows = rows.where('runs.version_id', 'in', query.versionIds);
   }
   if (query.contact !== undefined && query.contact !== '') {
-    rows = rows.where('contacts.handle', 'ilike', `%${query.contact}%`);
+    rows = rows.where('contacts.handle', 'ilike', `%${query.contact.replace(/[\\%_]/g, '\\$&')}%`);
   }
   const cursor = query.cursor === undefined ? undefined : decodeCursor(query.cursor);
   if (cursor !== undefined) {
@@ -151,10 +151,13 @@ export const registerRunRoutes = (app: App, deps: AppDeps): void => {
       if (run.status !== 'running' && run.status !== 'waiting') {
         return reply.status(409).send({ error: `A ${run.status} run cannot be stopped` });
       }
-      await finishRun(db, id, 'expired', deps.clock.now(), {
+      const stopped = await finishRun(db, id, 'expired', deps.clock.now(), {
         stepIndex: run.step_index,
         message: 'Stopped by the user',
       });
+      if (!stopped) {
+        return reply.status(409).send({ error: 'The run had already finished' });
+      }
       return runDetail(db, id);
     },
   );

@@ -1,6 +1,6 @@
 import type {
   GatewayAccount,
-  GatewayError,
+  GatewayErrorCode,
   GatewayPost,
   MessageRequest,
   MessageResponse,
@@ -8,7 +8,11 @@ import type {
   ReplyResponse,
 } from '@comment-automations/gateway-contract';
 
-export type { GatewayError };
+export type GatewayError = {
+  code: GatewayErrorCode | 'MALFORMED_RESPONSE';
+  message: string;
+  retryable: boolean;
+};
 
 export type GatewayResult<T> = { ok: true; value: T } | { ok: false; error: GatewayError };
 

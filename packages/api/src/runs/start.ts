@@ -1,8 +1,9 @@
 import type { AccountId, ContactId, EventId, RunId } from '@comment-automations/shared';
+import { sql } from 'kysely';
 import type { Db, RunContext } from '../db/types.js';
 import { json } from '../db/types.js';
 import type { LiveAutomation } from './match.js';
-import { enqueueJob, finishRun, logRun } from './store.js';
+import { ACTIVE_STATUSES, enqueueJob, finishRun, logRun } from './store.js';
 
 export type StartRunInput = {
   automation: LiveAutomation;
@@ -32,45 +33,57 @@ export const liveAutomations = async (db: Db, accountId: AccountId): Promise<Liv
 
 export const startRun = async (db: Db, input: StartRunInput): Promise<RunId | undefined> => {
   const { automation, now } = input;
-  const active = await db
-    .selectFrom('runs')
-    .select(['id', 'step_index'])
-    .where('automation_id', '=', automation.id)
-    .where('contact_id', '=', input.contactId)
-    .where('status', 'in', ['running', 'waiting'])
-    .forUpdate()
-    .executeTakeFirst();
-  if (active !== undefined) {
-    if (automation.definition.trigger.onRepeatWhileWaiting === 'ignore') {
-      return undefined;
+  for (;;) {
+    const active = await db
+      .selectFrom('runs')
+      .select(['id', 'step_index'])
+      .where('automation_id', '=', automation.id)
+      .where('contact_id', '=', input.contactId)
+      .where('status', 'in', ACTIVE_STATUSES)
+      .forUpdate()
+      .executeTakeFirst();
+    if (active !== undefined) {
+      if (automation.definition.trigger.onRepeatWhileWaiting === 'ignore') {
+        return undefined;
+      }
+      await finishRun(db, active.id, 'superseded', now, {
+        stepIndex: active.step_index,
+        message: 'Stopped: a newer run took over this conversation',
+      });
     }
-    await finishRun(db, active.id, 'superseded', now, {
-      stepIndex: active.step_index,
-      message: 'Stopped: a newer run took over this conversation',
+    const inserted = await db
+      .insertInto('runs')
+      .values({
+        automation_id: automation.id,
+        version_id: automation.versionId,
+        account_id: input.accountId,
+        contact_id: input.contactId,
+        trigger_event_id: input.triggerEventId,
+        status: 'running',
+        step_index: 0,
+        context: json(input.context),
+        error: null,
+        started_at: now,
+        updated_at: now,
+      })
+      .onConflict((conflict) =>
+        conflict
+          .columns(['automation_id', 'contact_id'])
+          .where(sql<boolean>`status in ('running', 'waiting')`)
+          .doNothing(),
+      )
+      .returning('id')
+      .executeTakeFirst();
+    if (inserted === undefined) {
+      continue;
+    }
+    await logRun(db, inserted.id, now, {
+      stepIndex: null,
+      message:
+        input.startedFrom === 'comment' ? 'Started from a comment' : 'Started from a message',
+      context: { supersededRunId: active?.id ?? null },
     });
+    await enqueueJob(db, 'advance', inserted.id, now);
+    return inserted.id;
   }
-  const { id } = await db
-    .insertInto('runs')
-    .values({
-      automation_id: automation.id,
-      version_id: automation.versionId,
-      account_id: input.accountId,
-      contact_id: input.contactId,
-      trigger_event_id: input.triggerEventId,
-      status: 'running',
-      step_index: 0,
-      context: json(input.context),
-      error: null,
-      started_at: now,
-      updated_at: now,
-    })
-    .returning('id')
-    .executeTakeFirstOrThrow();
-  await logRun(db, id, now, {
-    stepIndex: null,
-    message: input.startedFrom === 'comment' ? 'Started from a comment' : 'Started from a message',
-    context: { supersededRunId: active?.id ?? null },
-  });
-  await enqueueJob(db, 'advance', id, now);
-  return id;
 };

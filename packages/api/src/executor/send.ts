@@ -1,10 +1,10 @@
-import type { GatewayError, MessageButton } from '@comment-automations/gateway-contract';
+import type { MessageButton } from '@comment-automations/gateway-contract';
 import type { Clock } from '@comment-automations/shared';
 import { conversationId, renderTemplate } from '@comment-automations/shared';
 import type { Kysely } from 'kysely';
 import type { Database, Db, RunContext, RunError } from '../db/types.js';
 import { json } from '../db/types.js';
-import type { Gateway, GatewayResult } from '../gateway/port.js';
+import type { Gateway, GatewayError, GatewayResult } from '../gateway/port.js';
 import type { LoadedRun } from '../runs/store.js';
 import type { OutboundPurpose } from './idempotency.js';
 import { idempotencyKey } from './idempotency.js';
@@ -20,6 +20,7 @@ export type Deps = {
   gateway: Gateway;
   clock: Clock;
   fetch: typeof fetch;
+  webhookAllowPrivate: boolean;
 };
 
 export type StepFailure = { error: RunError; retryable: boolean };
@@ -77,6 +78,7 @@ export const gatewayFailure = (
     RECIPIENT_UNREACHABLE: "Couldn't send: the contact doesn't accept messages from this account",
     ACCOUNT_DISCONNECTED: "Couldn't send: the account is disconnected",
     RATE_LIMITED: 'The platform rate-limited this account',
+    MALFORMED_RESPONSE: 'The gateway answered outside the contract',
   };
   return {
     error: { code: error.code, message: messages[error.code] ?? `Couldn't send: ${error.message}` },

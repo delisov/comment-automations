@@ -30,7 +30,7 @@ export const registerAccountRoutes = (app: App, deps: AppDeps): void => {
     async (_request, reply) => {
       const listed = await deps.gateway.listAccounts();
       if (!listed.ok) {
-        return reply.status(502).send({ error: listed.error.message });
+        return reply.status(502).send({ error: 'The gateway could not list the accounts' });
       }
       const now = deps.clock.now();
       for (const account of listed.value) {
@@ -91,7 +91,7 @@ export const registerAccountRoutes = (app: App, deps: AppDeps): void => {
       }
       const listed = await deps.gateway.listPosts(account.external_id);
       if (!listed.ok) {
-        return reply.status(502).send({ error: listed.error.message });
+        return reply.status(502).send({ error: 'The gateway could not list the posts' });
       }
       return { posts: listed.value };
     },
