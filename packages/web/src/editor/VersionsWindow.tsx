@@ -25,6 +25,7 @@ export const VersionsWindow = ({
   versions,
   hasDraft,
   inProgress,
+  readOnly,
   onClose,
   onView,
   onMakeActive,
@@ -34,6 +35,7 @@ export const VersionsWindow = ({
   versions: Version[];
   hasDraft: boolean;
   inProgress: Map<number, number>;
+  readOnly: boolean;
   onClose: () => void;
   onView: (version: Version) => void;
   onMakeActive: (version: Version) => void;
@@ -115,7 +117,7 @@ export const VersionsWindow = ({
                       <Button kind="sec" small onClick={() => onView(version)}>
                         View
                       </Button>
-                      {version.isActive ? (
+                      {readOnly ? null : version.isActive ? (
                         <Button kind="sec" small onClick={() => onEditAsNew(version)}>
                           Edit as a new version
                         </Button>

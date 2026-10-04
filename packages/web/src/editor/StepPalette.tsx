@@ -1,5 +1,6 @@
 import type { CapabilitiesResponse } from '@comment-automations/api-schema';
 import type { Step, StepKind, Trigger } from '@comment-automations/shared';
+import { deliveredAsPrivateReply } from '@comment-automations/shared';
 import { useState } from 'react';
 import { nextAllowedStepKinds } from './stepRules.js';
 import { paletteEntry } from './steps.js';
@@ -17,6 +18,7 @@ export const StepPalette = ({
 }) => {
   const [open, setOpen] = useState(false);
   const kinds = nextAllowedStepKinds(caps.record, trigger, steps);
+  const privateReply = deliveredAsPrivateReply(caps.record, trigger, steps);
   return (
     <div style={{ position: 'relative' }}>
       <button
@@ -30,7 +32,7 @@ export const StepPalette = ({
       {open ? (
         <div className="menu" role="menu">
           {kinds.map((kind) => {
-            const entry = paletteEntry(kind, caps);
+            const entry = paletteEntry(kind, caps, privateReply);
             return (
               <div
                 key={kind}
