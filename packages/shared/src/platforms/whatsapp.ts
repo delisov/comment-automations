@@ -10,7 +10,7 @@ export const whatsapp: CapabilityRecord = {
   dmInitiation: 'contactFirst',
   commenterIsMessageable: 'no',
   reminderBeforeReply: true,
-  messageLimits: { maxChars: 4096, buttons: 3, linksInText: true },
+  messageLimits: { maxChars: 4096, buttons: 1, linksInText: true },
   replyLimits: { maxChars: 0 },
   ownActivityEcho: false,
   access: 'appReview',

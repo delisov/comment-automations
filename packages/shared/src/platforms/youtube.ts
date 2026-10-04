@@ -11,6 +11,6 @@ export const youtube: CapabilityRecord = {
   reminderBeforeReply: false,
   messageLimits: { maxChars: 0, buttons: 0, linksInText: false },
   replyLimits: { maxChars: 10000 },
-  ownActivityEcho: false,
+  ownActivityEcho: true,
   access: 'appReview',
 };

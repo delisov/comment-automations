@@ -66,13 +66,18 @@ type CapabilityRecord = {
   commenterIsMessageable: 'yes' | 'viaPrivateReplyOnly' | 'no'
   reminderBeforeReply: boolean          // can a second message go out before the person ever replied
   messageLimits: { maxChars: number, maxBytes?: number, buttons: number, linksInText: boolean }
-  ownActivityEcho: boolean
+  replyLimits: { maxChars: number }
+  maxConsecutiveMessages?: number       // TikTok: 10 business messages per window
+  ownActivityEcho: boolean              // true wherever the account's own replies come back as events: all comment networks
   access: 'selfServe' | 'appReview' | 'partnerOnly' | 'paidTier'
 }
 ```
-One record per platform: instagram, facebook, threads, x, bluesky, youtube, linkedin, whatsapp, tiktok, pinterest. Values from `docs/platforms.md`.
+One record per platform: instagram, facebook, threads, x, bluesky, youtube, linkedin, whatsapp, tiktok, pinterest. Values from `docs/platforms.md`; WhatsApp carries one URL button (interactive call-to-action), not three.
 
-Derived helpers (pure): `allowedStepKinds(record)`, `allowedTriggers(record)`, `requiresUnreachableChoice(record)`, `canRemindBeforeReply(record)`.
+Derived helpers (pure):
+- `allowedTriggers(record)`, `requiresUnreachableChoice(record)`, `canRemindBeforeReply(record)`.
+- `allowedStepKinds(record)`: every step kind the platform can ever offer (the union over positions).
+- `nextAllowedStepKinds(record, trigger, stepsSoFar)`: what the constructor may append at this position. `reply_to_comment` only when `trigger.comments` is present and the record allows replies; `send_message` where messaging is possible, except that on `commenterIsMessageable = 'viaPrivateReplyOnly'` a second `send_message` needs a `wait_for_reply` somewhere after the previous one (the private reply does not open the window); `wait_for_reply` only when a `send_message` precedes it with no other wait in between; `call_webhook` always. The editor renders its palette from this helper and `validateDefinition` applies the same helper per position, so a flow that can be built validates clean (HD-032).
 
 ## 4. Automation definition (what a version holds)
 
@@ -81,7 +86,7 @@ type Definition = {
   trigger: {
     comments?: { posts: { kind:'any' } | { kind:'specific', postId } , keywords: string[] }
     messages?: { keywords: string[] }
-    onRepeatWhileWaiting: 'supersede' | 'ignore'            // HD-009; default supersede
+    onRepeatWhileWaiting: 'supersede' | 'ignore'            // HD-009; required, the editor pre-selects supersede
   }
   steps: Step[]
 }
@@ -91,11 +96,31 @@ type Step =
   | { kind:'wait_for_reply', expect:'email'|'any', giveUpHours, reminder?: { afterHours, text }, nudge?: { text, then:'wait'|'end' } }
   | { kind:'call_webhook', method, url, headers: Record<string,string> }
 ```
-Template variables in text: `{{email}}`, `{{contact.handle}}`.
+Template variables in text: `{{email}}` (known only after a `wait_for_reply` with `expect:'email'`) and `{{contact.handle}}`; spaces inside the braces are tolerated, any other `{{...}}` is rejected. Length limits are checked on the raw text, before placeholders are filled.
 
-Publish-time validation (`validateDefinition(def, record)`) returns a list of `{ path, code, message }`; empty means publishable. It is the API guard behind the constructor (HD-032); the constructor itself only offers what `allowedStepKinds` and friends return.
+Publish-time validation (`validateDefinition(def, record)`) returns a list of `{ path, code, message }`; empty means publishable. It is the API guard behind the constructor (HD-032); the constructor itself only offers what `nextAllowedStepKinds` and friends return. Issue codes:
 
-Keyword matching: whole word, case-insensitive, Unicode letters, line breaks inside a phrase tolerated, empty list matches all.
+| Code | Path | Meaning |
+|---|---|---|
+| `TRIGGER_REQUIRED` | `trigger` | neither comments nor messages trigger |
+| `TRIGGER_NOT_SUPPORTED` | `trigger.comments`, `trigger.messages` | the record offers no such trigger |
+| `KEYWORDS_REQUIRED` | `trigger.comments.keywords` | comments trigger on any post with no keyword |
+| `STEP_NOT_SUPPORTED` | `steps.N.kind` | the platform never offers this kind (outside `allowedStepKinds`); the step is not checked further |
+| `STEP_NOT_ALLOWED_HERE` | `steps.N.kind` | the kind is outside `nextAllowedStepKinds` at this position; message is one of "A second message needs a wait for a reply before it on this network", "Replying to the comment needs a comments trigger", "Waiting needs a message right before it" |
+| `TEXT_REQUIRED`, `TEXT_TOO_LONG`, `TEXT_TOO_MANY_BYTES` | any text path | empty, over `maxChars`, over `maxBytes` |
+| `UNKNOWN_PLACEHOLDER` | any text path | a `{{...}}` other than `{{email}}` or `{{contact.handle}}` |
+| `EMAIL_NOT_CAPTURED_YET` | any text path | `{{email}}` before a `wait_for_reply` with `expect:'email'`, including that wait's own reminder and nudge texts |
+| `TOO_MANY_BUTTONS`, `BUTTON_TITLE_INVALID`, `BUTTON_URL_INVALID` | `steps.N.buttons[.i.title|.i.url]` | over `messageLimits.buttons`; title not 1 to 20 characters; not http(s) |
+| `UNREACHABLE_CHOICE_REQUIRED`, `UNREACHABLE_CHOICE_NOT_SUPPORTED` | `steps.N.onUnreachable` | missing where `requiresUnreachableChoice`, present where not |
+| `PUBLIC_REPLY_NEEDS_COMMENTS_TRIGGER` | `steps.N.onUnreachable` | `publicReplyInstead` without a comments trigger |
+| `FALLBACK_TEXT_REQUIRED` | `steps.N.fallbackText` | `publicReplyInstead` without the reply text |
+| `GIVE_UP_HOURS_INVALID` | `steps.N.giveUpHours` | not above zero |
+| `REMINDER_NOT_SUPPORTED` | `steps.N.reminder` | reminder where `canRemindBeforeReply` is false |
+| `REMINDER_DELAY_INVALID` | `steps.N.reminder.afterHours` | not strictly between zero and `giveUpHours` |
+| `REMINDER_AFTER_WINDOW` | `steps.N.reminder.afterHours` | `afterHours` in ms not below `conversationWindow.durationMs` |
+| `METHOD_INVALID`, `URL_INVALID` | `steps.N.method`, `steps.N.url` | unknown method; not http(s) |
+
+Keyword matching: whole word, case-insensitive, Unicode letters, marks and digits; each emoji is a word of its own; a keyword written entirely in a script without word spacing (Han, Hiragana, Katakana, Thai, Lao, Khmer, Myanmar) matches as a substring of the normalised text; line breaks inside a phrase tolerated, empty list matches all.
 
 ## 5. Service data model (schema `app`)
 
